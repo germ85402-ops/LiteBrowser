@@ -1,0 +1,53 @@
+<resources>
+    <style name="Platform.Theme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <style name="Platform.Dialog" parent="android:Theme.Material.Light.Dialog.Alert" />
+
+    <style name="AppTheme" parent="Platform.Theme">
+        <item name="android:colorPrimary">@color/c_toolbar</item>
+        <item name="android:colorPrimaryDark">@color/c_toolbar</item>
+        <item name="android:colorAccent">@color/c_accent</item>
+        <item name="android:colorControlActivated">@color/c_accent</item>
+        <item name="android:statusBarColor">@color/c_toolbar</item>
+        <item name="android:navigationBarColor">@color/c_toolbar</item>
+        <item name="android:windowBackground">@color/c_bg</item>
+        <item name="android:textColorPrimary">@color/c_text</item>
+        <item name="android:textColorSecondary">@color/c_text2</item>
+        <item name="android:textColorHint">@color/c_text2</item>
+        <item name="android:alertDialogTheme">@style/DialogTheme</item>
+    </style>
+
+    <style name="DialogTheme" parent="Platform.Dialog">
+        <item name="android:colorAccent">@color/c_accent</item>
+        <item name="android:colorControlActivated">@color/c_accent</item>
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:textColorPrimary">@color/c_text</item>
+        <item name="android:textColorSecondary">@color/c_text2</item>
+    </style>
+
+    <style name="IconButton">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:background">?android:attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">center</item>
+    </style>
+
+    <style name="MenuItem">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:drawablePadding">18dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:textColor">@color/c_text</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="MenuIcon" parent="IconButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+</resources>

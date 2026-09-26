@@ -1,0 +1,8 @@
+<resources>
+    <plurals name="tabs_count">
+        <item quantity="one">%d вкладка</item>
+        <item quantity="few">%d вкладки</item>
+        <item quantity="many">%d вкладок</item>
+        <item quantity="other">%d вкладки</item>
+    </plurals>
+</resources>

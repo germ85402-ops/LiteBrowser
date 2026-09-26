@@ -2,7 +2,10 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/c_bg"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
 
     <LinearLayout
         android:id="@+id/content"
@@ -11,57 +14,164 @@
         android:orientation="vertical">
 
         <LinearLayout
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="#F2F2F2"
+            android:layout_height="56dp"
+            android:background="@color/c_toolbar"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="4dp"
-            android:paddingEnd="4dp">
+            android:paddingEnd="2dp">
 
-            <Button
-                android:id="@+id/btnBack"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="40dp"
-                android:layout_height="match_parent"
-                android:minWidth="0dp"
-                android:text="←"
-                android:textSize="18sp" />
+            <ImageButton
+                android:id="@+id/btnHome"
+                style="@style/IconButton"
+                android:contentDescription="@string/home"
+                android:src="@drawable/ic_home" />
+
+            <LinearLayout
+                android:id="@+id/omnibox"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="2dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_omnibox"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingEnd="5dp">
+
+                <ImageView
+                    android:id="@+id/siteIcon"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="@string/page_info"
+                    android:src="@drawable/ic_search" />
+
+                <EditText
+                    android:id="@+id/urlBar"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:hint="@string/url_hint"
+                    android:imeOptions="actionGo|flagNoExtractUi"
+                    android:importantForAutofill="no"
+                    android:inputType="textUri"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="6dp"
+                    android:selectAllOnFocus="true"
+                    android:singleLine="true"
+                    android:textColor="@color/c_text"
+                    android:textColorHint="@color/c_text2"
+                    android:textSize="15sp" />
+
+                <ImageButton
+                    android:id="@+id/btnClear"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/clear"
+                    android:src="@drawable/ic_close_small"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/shieldChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_chip"
+                    android:drawableStart="@drawable/ic_shield_accent"
+                    android:drawablePadding="3dp"
+                    android:gravity="center"
+                    android:minWidth="44dp"
+                    android:paddingStart="7dp"
+                    android:paddingEnd="9dp"
+                    android:textColor="@color/c_accent"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/btnTabs"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/tabs_title">
+
+                <TextView
+                    android:id="@+id/tabCount"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_tab_count"
+                    android:gravity="center"
+                    android:textColor="@color/c_icon"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <ImageButton
+                android:id="@+id/btnMenu"
+                style="@style/IconButton"
+                android:contentDescription="@string/menu"
+                android:src="@drawable/ic_more_vert" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/findBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@color/c_toolbar"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="2dp"
+            android:visibility="gone">
 
             <EditText
-                android:id="@+id/urlBar"
+                android:id="@+id/findInput"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="42dp"
                 android:layout_weight="1"
-                android:background="@drawable/url_bg"
-                android:hint="@string/url_hint"
-                android:imeOptions="actionGo"
-                android:inputType="textUri"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:selectAllOnFocus="true"
-                android:singleLine="true"
-                android:textSize="14sp" />
-
-            <Button
-                android:id="@+id/btnVideos"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
+                android:background="@drawable/bg_omnibox"
+                android:hint="@string/find_hint"
+                android:imeOptions="actionSearch|flagNoExtractUi"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:paddingStart="16dp"
                 android:paddingEnd="8dp"
-                android:text="⬇ 0"
-                android:textSize="14sp" />
+                android:singleLine="true"
+                android:textColor="@color/c_text"
+                android:textSize="15sp" />
 
-            <Button
-                android:id="@+id/btnMenu"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="36dp"
-                android:layout_height="match_parent"
-                android:minWidth="0dp"
-                android:text="⋮"
-                android:textSize="18sp" />
+            <TextView
+                android:id="@+id/findCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:gravity="center"
+                android:textColor="@color/c_text2"
+                android:textSize="13sp" />
+
+            <ImageButton
+                android:id="@+id/findPrev"
+                style="@style/IconButton"
+                android:contentDescription="@string/prev"
+                android:src="@drawable/ic_expand_less" />
+
+            <ImageButton
+                android:id="@+id/findNext"
+                style="@style/IconButton"
+                android:contentDescription="@string/next"
+                android:src="@drawable/ic_expand_more" />
+
+            <ImageButton
+                android:id="@+id/findClose"
+                style="@style/IconButton"
+                android:contentDescription="@string/close"
+                android:src="@drawable/ic_close" />
         </LinearLayout>
 
         <ProgressBar
@@ -70,12 +180,49 @@
             android:layout_width="match_parent"
             android:layout_height="3dp"
             android:max="100"
-            android:visibility="gone" />
+            android:progressDrawable="@drawable/progress_accent"
+            android:visibility="invisible" />
 
-        <WebView
-            android:id="@+id/webView"
+        <FrameLayout
+            android:id="@+id/webContainer"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_weight="1">
+
+            <include
+                android:id="@+id/ntp"
+                layout="@layout/ntp" />
+
+            <ListView
+                android:id="@+id/suggestions"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/c_bg"
+                android:divider="@null"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/mediaFab"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="20dp"
+                android:background="@drawable/bg_fab"
+                android:drawableStart="@drawable/ic_download_on_accent"
+                android:drawablePadding="8dp"
+                android:elevation="6dp"
+                android:gravity="center"
+                android:paddingStart="16dp"
+                android:paddingEnd="20dp"
+                android:textColor="@color/c_on_accent"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
     </LinearLayout>
+
+    <include
+        android:id="@+id/tabSwitcher"
+        layout="@layout/tab_switcher"
+        android:visibility="gone" />
 </FrameLayout>

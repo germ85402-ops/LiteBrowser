@@ -10,6 +10,7 @@
         android:maxSdkVersion="28" />
 
     <application
+        android:name=".App"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
@@ -40,5 +41,16 @@
             android:name=".HlsDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.AdblockActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.LibraryActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden" />
     </application>
 </manifest>

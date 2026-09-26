@@ -1,0 +1,6 @@
+<resources>
+    <style name="Platform.Theme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
