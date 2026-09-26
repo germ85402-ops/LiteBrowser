@@ -24,6 +24,7 @@ class NewTabPage(
     val view: View,
     private val onOpen: (String) -> Unit,
     onSearch: () -> Unit,
+    private val incognito: Boolean = false,
 ) {
     private val tiles = view.findViewById<GridLayout>(R.id.ntpTiles)
     private val stats = view.findViewById<TextView>(R.id.ntpStatsCount)
@@ -36,11 +37,24 @@ class NewTabPage(
         view.findViewById<View>(R.id.ntpStats).setOnClickListener {
             act.startActivity(android.content.Intent(act, AdblockActivity::class.java))
         }
+        if (incognito) {
+            view.findViewById<View>(R.id.ntpIncognito).visibility = View.VISIBLE
+            tiles.visibility = View.GONE
+            view.findViewById<View>(R.id.ntpStats).visibility = View.GONE
+            view.findViewById<TextView>(R.id.ntpIncognitoText).text = if (com.litebrowser.Incognito.isolated) {
+                "Браузер не сохранит историю, cookie, данные сайтов и введённые в формы данные. " +
+                    "Всё удалится, когда вы закроете последнюю вкладку инкогнито.\n\n" +
+                    "Загруженные файлы и закладки сохранятся. Сайты, провайдер и работодатель по-прежнему могут видеть ваши действия."
+            } else {
+                "Браузер не сохранит историю посещений и вкладки. На этой версии Android cookie общие с обычными вкладками."
+            }
+        }
     }
 
     private fun hidden(): Set<String> = Prefs.sp.getStringSet("ntp_hidden", emptySet())!!
 
     fun refresh() {
+        if (incognito) return
         stats.text = NumberFormat.getIntegerInstance().format(AdBlock.totalBlocked.get())
         tiles.removeAllViews()
         val hidden = hidden()

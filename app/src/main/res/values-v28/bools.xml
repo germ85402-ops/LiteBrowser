@@ -1,0 +1,4 @@
+<resources>
+    <bool name="incognito_process">true</bool>
+    <bool name="incognito_legacy">false</bool>
+</resources>

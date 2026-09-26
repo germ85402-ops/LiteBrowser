@@ -35,7 +35,10 @@ class ScreenshotTest {
         out.mkdirs()
     }
 
-    private fun idle() = repeat(3) { ShadowLooper.idleMainLooper(); Thread.sleep(50) }
+    private fun idle() = repeat(3) {
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(400))
+        Thread.sleep(50)
+    }
 
     private fun render(v: View): Bitmap {
         val bmp = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)
@@ -91,10 +94,13 @@ class ScreenshotTest {
         idle()
         act.findViewById<View>(R.id.btnTabs).performClick()
         idle()
-        act.findViewById<View>(R.id.tabSwitcher).apply { alpha = 1f; scaleX = 1f; scaleY = 1f }
         shot("03_tabs", act)
+
+        // Closing a tab from the switcher shows the undo snackbar.
+        act.closeTab(act.tabs.last())
+        idle()
+        shot("11_undo_snackbar", act)
         act.findViewById<View>(R.id.tsBack).performClick()
-        act.findViewById<View>(R.id.tabSwitcher).visibility = View.GONE
         idle()
 
         // Main menu popup.
@@ -128,6 +134,12 @@ class ScreenshotTest {
     fun darkNewTab() {
         seedHistory()
         shot("05_new_tab_dark", main())
+    }
+
+    @Test
+    fun incognito() {
+        val act = Robolectric.buildActivity(IncognitoActivity::class.java).setup().get().also { idle() }
+        shot("12_incognito", act)
     }
 
     @Test

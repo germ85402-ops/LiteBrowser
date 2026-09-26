@@ -37,6 +37,14 @@ class SettingsActivity : Activity() {
         }
         page.switchRow("Поисковые подсказки", "Предлагать запросы при вводе", Prefs.suggestions) { Prefs.suggestions = it }
         page.switchRow("Адресная строка внизу", "Удобнее для работы одной рукой", Prefs.bottomBar) { Prefs.bottomBar = it }
+        page.switchRow("Скрывать панель при прокрутке", "Больше места для страницы", Prefs.autoHideBar) { Prefs.autoHideBar = it }
+        page.switchRow("Потянуть вниз для обновления", "Обновить страницу жестом сверху", Prefs.pullToRefresh) { Prefs.pullToRefresh = it }
+
+        page.header("Жесты")
+        page.row("Свайп по адресной строке влево/вправо", "Переключение между вкладками")
+        page.row("Свайп вниз по адресной строке", "Открыть список вкладок")
+        page.row("Свайп карточки вкладки в сторону", "Закрыть вкладку")
+        page.row("Долгое нажатие на счётчик вкладок", "Закрыть вкладку, новая вкладка, инкогнито")
 
         page.header("Блокировка рекламы")
         adblockRow = page.row("Блокировка рекламы и трекеров", null) {

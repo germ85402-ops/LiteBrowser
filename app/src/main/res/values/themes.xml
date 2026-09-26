@@ -50,4 +50,12 @@
         <item name="android:layout_height">48dp</item>
         <item name="android:layout_weight">1</item>
     </style>
+    <style name="MenuAnimTop">
+        <item name="android:windowEnterAnimation">@anim/menu_enter_top</item>
+        <item name="android:windowExitAnimation">@anim/menu_exit</item>
+    </style>
+    <style name="MenuAnimBottom">
+        <item name="android:windowEnterAnimation">@anim/menu_enter_bottom</item>
+        <item name="android:windowExitAnimation">@anim/menu_exit</item>
+    </style>
 </resources>

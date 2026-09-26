@@ -39,6 +39,40 @@
             android:textColor="@color/c_text2"
             android:textSize="16sp" />
 
+        <LinearLayout
+            android:id="@+id/ntpIncognito"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="36dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_incognito_big" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/incognito_title"
+                android:textColor="@color/c_text"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/ntpIncognitoText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:lineSpacingExtra="4dp"
+                android:textColor="@color/c_text2"
+                android:textSize="14sp" />
+        </LinearLayout>
+
         <GridLayout
             android:id="@+id/ntpTiles"
             android:layout_width="match_parent"

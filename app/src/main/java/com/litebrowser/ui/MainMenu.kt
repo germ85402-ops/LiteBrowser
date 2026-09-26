@@ -18,6 +18,7 @@ class MainMenu(private val act: MainActivity) {
         val pw = PopupWindow(v, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
         pw.setBackgroundDrawable(act.getDrawable(R.drawable.bg_popup))
         pw.elevation = act.dp(12).toFloat()
+        pw.animationStyle = if (bottom) R.style.MenuAnimBottom else R.style.MenuAnimTop
 
         val page = !tab.isNtp
         fun item(id: Int, enabled: Boolean = true, action: () -> Unit) {
@@ -39,7 +40,12 @@ class MainMenu(private val act: MainActivity) {
         )
         item(R.id.mRefresh, page) { act.reloadOrStop() }
         item(R.id.mNewTab) { act.newTab(null) }
+        item(R.id.mIncognito) { act.openIncognito(null) }
+        item(R.id.mRecent) { act.showRecentTabs() }
+        item(R.id.mTranslate, page) { act.translatePage() }
+        item(R.id.mAddHome, page && android.os.Build.VERSION.SDK_INT >= 26) { act.addToHomeScreen() }
         item(R.id.mHistory) { act.openLibrary(bookmarks = false) }
+        if (act.incognito) v.findViewById<View>(R.id.mRecent).visibility = View.GONE
         item(R.id.mBookmarks) { act.openLibrary(bookmarks = true) }
         item(R.id.mDownloads) { act.openDownloads() }
         item(R.id.mFind, page) { act.startFind() }
