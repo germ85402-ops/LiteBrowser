@@ -19,6 +19,9 @@
             android:id="@+id/ntpLogo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:drawableStart="@drawable/ic_brand"
+            android:drawablePadding="12dp"
+            android:gravity="center_vertical"
             android:textColor="@color/c_text"
             android:textSize="34sp"
             android:textStyle="bold" />

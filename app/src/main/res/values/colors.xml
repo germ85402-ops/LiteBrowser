@@ -15,4 +15,5 @@
     <color name="c_snack">#2B2F38</color>
     <color name="c_snack_text">#F1F3F7</color>
     <color name="c_snack_action">#9DB6FF</color>
+    <color name="ic_launcher_bg">#3A67F0</color>
 </resources>

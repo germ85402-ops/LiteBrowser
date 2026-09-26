@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.litebrowser"
+    namespace = "app.svetlo"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.litebrowser"
+        applicationId = "app.svetlo.browser"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -49,10 +49,13 @@ dependencies {
 }
 
 tasks.withType<Test>().configureEach {
-    // Screenshot rendering downloads a large Android runtime; run it only on request (-Pscreenshots).
+    // Robolectric tests download a large Android runtime; run them only on request (-Pscreenshots).
     val screenshots = project.findProperty("screenshots")?.toString() ?: "false"
     systemProperty("screenshots", screenshots)
-    if (screenshots == "false") filter.excludeTestsMatching("*ScreenshotTest")
+    if (screenshots == "false") {
+        filter.excludeTestsMatching("*ScreenshotTest")
+        filter.excludeTestsMatching("*RobolectricTest")
+    }
     systemProperty("screenshots.dir", layout.buildDirectory.dir("screenshots").get().asFile.absolutePath)
     testLogging { showStandardStreams = true; events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }

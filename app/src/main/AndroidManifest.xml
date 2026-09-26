@@ -2,6 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Requested only when a site asks for camera, microphone or location. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -9,10 +16,15 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+
     <application
         android:name=".App"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher_round"
         android:label="@string/app_name"
         android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
@@ -50,7 +62,7 @@
             android:label="@string/incognito_title"
             android:launchMode="singleTask"
             android:process=":incognito"
-            android:taskAffinity="com.litebrowser.incognito"
+            android:taskAffinity="app.svetlo.incognito"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".IncognitoLegacyActivity"
@@ -59,11 +71,14 @@
             android:exported="false"
             android:label="@string/incognito_title"
             android:launchMode="singleTask"
-            android:taskAffinity="com.litebrowser.incognito"
+            android:taskAffinity="app.svetlo.incognito"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.SettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.OnboardingActivity"
             android:exported="false" />
         <activity
             android:name=".ui.AdblockActivity"
