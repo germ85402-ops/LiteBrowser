@@ -1,4 +1,27 @@
 <resources>
     <string name="app_name">LiteBrowser</string>
     <string name="url_hint">Поиск или адрес</string>
+    <string name="find_hint">Найти на странице</string>
+    <string name="tabs_title">Вкладки</string>
+    <string name="new_tab">Новая вкладка</string>
+    <string name="history">История</string>
+    <string name="bookmarks">Закладки</string>
+    <string name="downloads">Загрузки</string>
+    <string name="share">Поделиться</string>
+    <string name="desktop_site">Версия для ПК</string>
+    <string name="adblock">Блокировка рекламы</string>
+    <string name="settings">Настройки</string>
+    <string name="blocked_caption">рекламы и трекеров заблокировано</string>
+    <string name="back">Назад</string>
+    <string name="forward">Вперёд</string>
+    <string name="home">Домой</string>
+    <string name="menu">Меню</string>
+    <string name="clear">Очистить</string>
+    <string name="close">Закрыть</string>
+    <string name="reload">Обновить</string>
+    <string name="page_info">О странице</string>
+    <string name="videos">Видео на странице</string>
+    <string name="close_all">Закрыть все</string>
+    <string name="prev">Предыдущее</string>
+    <string name="next">Следующее</string>
 </resources>

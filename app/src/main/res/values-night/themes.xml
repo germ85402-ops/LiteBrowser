@@ -1,0 +1,6 @@
+<resources>
+    <style name="Platform.Theme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="Platform.Dialog" parent="android:Theme.Material.Dialog.Alert" />
+</resources>
