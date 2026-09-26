@@ -39,7 +39,7 @@
             android:src="@drawable/ic_close_small" />
     </LinearLayout>
 
-    <com.litebrowser.ui.TopCropImageView
+    <app.svetlo.ui.TopCropImageView
         android:id="@+id/tabThumb"
         android:layout_width="match_parent"
         android:layout_height="0dp"

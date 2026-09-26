@@ -13,7 +13,7 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <com.litebrowser.ui.GestureBar
+        <app.svetlo.ui.GestureBar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="56dp"
@@ -127,7 +127,7 @@
                 style="@style/IconButton"
                 android:contentDescription="@string/menu"
                 android:src="@drawable/ic_more_vert" />
-        </com.litebrowser.ui.GestureBar>
+        </app.svetlo.ui.GestureBar>
 
         <LinearLayout
             android:id="@+id/findBar"
@@ -236,7 +236,7 @@
         layout="@layout/tab_switcher"
         android:visibility="gone" />
 
-    <com.litebrowser.ui.TopCropImageView
+    <app.svetlo.ui.TopCropImageView
         android:id="@+id/zoomOverlay"
         android:layout_width="0dp"
         android:layout_height="0dp"

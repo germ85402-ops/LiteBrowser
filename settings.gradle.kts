@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "LiteBrowser"
+rootProject.name = "Svetlo"
 include(":app")

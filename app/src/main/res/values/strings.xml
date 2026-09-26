@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">LiteBrowser</string>
+    <string name="app_name">Svetlo</string>
     <string name="url_hint">Поиск или адрес</string>
     <string name="find_hint">Найти на странице</string>
     <string name="tabs_title">Вкладки</string>

@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.litebrowser"
+    namespace = "app.svetlo"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.litebrowser"
+        applicationId = "app.svetlo.browser"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

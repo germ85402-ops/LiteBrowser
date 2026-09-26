@@ -50,7 +50,7 @@
             android:label="@string/incognito_title"
             android:launchMode="singleTask"
             android:process=":incognito"
-            android:taskAffinity="com.litebrowser.incognito"
+            android:taskAffinity="app.svetlo.incognito"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".IncognitoLegacyActivity"
@@ -59,7 +59,7 @@
             android:exported="false"
             android:label="@string/incognito_title"
             android:launchMode="singleTask"
-            android:taskAffinity="com.litebrowser.incognito"
+            android:taskAffinity="app.svetlo.incognito"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
