@@ -1,0 +1,15 @@
+<resources>
+    <color name="c_bg">#FFFFFF</color>
+    <color name="c_toolbar">#F5F7FB</color>
+    <color name="c_omnibox">#E8ECF4</color>
+    <color name="c_card">#FFFFFF</color>
+    <color name="c_surface2">#EEF1F7</color>
+    <color name="c_text">#1A1C21</color>
+    <color name="c_text2">#5E6472</color>
+    <color name="c_icon">#434955</color>
+    <color name="c_accent">#3A67F0</color>
+    <color name="c_accent_soft">#E0E8FF</color>
+    <color name="c_on_accent">#FFFFFF</color>
+    <color name="c_divider">#E1E5EC</color>
+    <color name="c_warn">#D9822B</color>
+</resources>

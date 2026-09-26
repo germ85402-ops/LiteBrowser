@@ -32,11 +32,27 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    buildFeatures {
+        buildConfig = true
+    }
     packaging {
         resources.excludes += setOf("META-INF/*.kotlin_module", "kotlin/**", "DebugProbesKt.bin")
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.13")
+}
+
+tasks.withType<Test>().configureEach {
+    // Screenshot rendering downloads a large Android runtime; run it only on request (-Pscreenshots).
+    val screenshots = project.findProperty("screenshots")?.toString() ?: "false"
+    systemProperty("screenshots", screenshots)
+    if (screenshots == "false") filter.excludeTestsMatching("*ScreenshotTest")
+    systemProperty("screenshots.dir", layout.buildDirectory.dir("screenshots").get().asFile.absolutePath)
+    testLogging { showStandardStreams = true; events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
