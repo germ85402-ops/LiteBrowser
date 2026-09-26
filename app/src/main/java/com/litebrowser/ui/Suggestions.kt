@@ -25,7 +25,7 @@ class Suggestions(
     private val onPick: (String) -> Unit,
     private val onFill: (String) -> Unit,
 ) {
-    private enum class Kind { GO, SEARCH, HISTORY, BOOKMARK }
+    private enum class Kind { GO, SEARCH, HISTORY, BOOKMARK, CLIPBOARD }
     private class Item(val kind: Kind, val title: String, val sub: String?, val value: String)
 
     private var items: List<Item> = emptyList()
@@ -39,10 +39,24 @@ class Suggestions(
         list.setOnItemClickListener { _, _, pos, _ -> items.getOrNull(pos)?.let { onPick(it.value) } }
     }
 
-    fun query(text: String) {
+    /** Suggestions for an empty omnibox: copied link and recent pages. */
+    fun zeroSuggest(clip: String?, withHistory: Boolean) {
+        seq++
+        val out = ArrayList<Item>()
+        if (clip != null) {
+            val url = Prefs.looksLikeUrl(clip)
+            out += Item(Kind.CLIPBOARD, if (url) "Скопированная ссылка" else "Скопированный текст", clip, clip)
+        }
+        if (withHistory) BrowserDb.history(limit = 6).forEach { e -> out += Item(Kind.HISTORY, e.title.ifBlank { e.url }, e.url, e.url) }
+        items = out
+        adapter.notifyDataSetChanged()
+        list.visibility = if (out.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    fun query(text: String, clip: String? = null, withHistory: Boolean = true) {
         val q = text.trim()
         val my = ++seq
-        if (q.isEmpty()) { hide(); return }
+        if (q.isEmpty()) { zeroSuggest(clip, withHistory); return }
         val local = BrowserDb.search(q, 4)
         update(q, local, emptyList())
         if (!Prefs.suggestions || Prefs.looksLikeUrl(q)) return
@@ -98,6 +112,7 @@ class Suggestions(
                     Kind.SEARCH -> R.drawable.ic_search
                     Kind.HISTORY -> R.drawable.ic_history_small
                     Kind.BOOKMARK -> R.drawable.ic_bookmark_small
+                    Kind.CLIPBOARD -> R.drawable.ic_clipboard
                 },
             )
             v.findViewById<TextView>(R.id.sTitle).text = it.title

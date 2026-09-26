@@ -5,4 +5,10 @@
         <item quantity="many">%d вкладок</item>
         <item quantity="other">%d вкладки</item>
     </plurals>
+    <plurals name="incognito_tabs_count">
+        <item quantity="one">Инкогнито · %d вкладка</item>
+        <item quantity="few">Инкогнито · %d вкладки</item>
+        <item quantity="many">Инкогнито · %d вкладок</item>
+        <item quantity="other">Инкогнито · %d вкладки</item>
+    </plurals>
 </resources>

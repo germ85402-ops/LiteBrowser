@@ -24,4 +24,10 @@
     <string name="close_all">Закрыть все</string>
     <string name="prev">Предыдущее</string>
     <string name="next">Следующее</string>
+    <string name="voice_search">Голосовой поиск</string>
+    <string name="incognito_new">Новая вкладка инкогнито</string>
+    <string name="incognito_title">Режим инкогнито</string>
+    <string name="recent_tabs">Недавние вкладки</string>
+    <string name="translate">Перевести</string>
+    <string name="add_home">Добавить на главный экран</string>
 </resources>

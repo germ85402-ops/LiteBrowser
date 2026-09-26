@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="272dp"
+    android:layout_height="wrap_content"
+    android:scrollbars="none">
+<LinearLayout
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:paddingTop="4dp"
@@ -27,11 +31,15 @@
         android:background="@color/c_divider" />
 
     <TextView android:id="@+id/mNewTab" style="@style/MenuItem" android:drawableStart="@drawable/ic_add" android:text="@string/new_tab" />
+    <TextView android:id="@+id/mIncognito" style="@style/MenuItem" android:drawableStart="@drawable/ic_incognito" android:text="@string/incognito_new" />
     <TextView android:id="@+id/mHistory" style="@style/MenuItem" android:drawableStart="@drawable/ic_history" android:text="@string/history" />
     <TextView android:id="@+id/mBookmarks" style="@style/MenuItem" android:drawableStart="@drawable/ic_bookmark" android:text="@string/bookmarks" />
     <TextView android:id="@+id/mDownloads" style="@style/MenuItem" android:drawableStart="@drawable/ic_download" android:text="@string/downloads" />
+    <TextView android:id="@+id/mRecent" style="@style/MenuItem" android:drawableStart="@drawable/ic_devices" android:text="@string/recent_tabs" />
     <TextView android:id="@+id/mFind" style="@style/MenuItem" android:drawableStart="@drawable/ic_find" android:text="@string/find_hint" />
     <TextView android:id="@+id/mShare" style="@style/MenuItem" android:drawableStart="@drawable/ic_share" android:text="@string/share" />
+    <TextView android:id="@+id/mTranslate" style="@style/MenuItem" android:drawableStart="@drawable/ic_translate" android:text="@string/translate" />
+    <TextView android:id="@+id/mAddHome" style="@style/MenuItem" android:drawableStart="@drawable/ic_add_home" android:text="@string/add_home" />
 
     <LinearLayout
         android:id="@+id/mDesktop"
@@ -61,3 +69,4 @@
     <TextView android:id="@+id/mAdblock" style="@style/MenuItem" android:drawableStart="@drawable/ic_shield" android:text="@string/adblock" />
     <TextView android:id="@+id/mSettings" style="@style/MenuItem" android:drawableStart="@drawable/ic_settings" android:text="@string/settings" />
 </LinearLayout>
+</ScrollView>

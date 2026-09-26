@@ -43,6 +43,26 @@
             android:foregroundServiceType="dataSync" />
 
         <activity
+            android:name=".IncognitoActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:enabled="@bool/incognito_process"
+            android:exported="false"
+            android:label="@string/incognito_title"
+            android:launchMode="singleTask"
+            android:process=":incognito"
+            android:taskAffinity="com.litebrowser.incognito"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".IncognitoLegacyActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:enabled="@bool/incognito_legacy"
+            android:exported="false"
+            android:label="@string/incognito_title"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.litebrowser.incognito"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".ui.SettingsActivity"
             android:exported="false" />
         <activity

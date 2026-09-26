@@ -34,6 +34,12 @@ object Prefs {
     var bottomBar: Boolean
         get() = bool("bottom_bar", false)
         set(v) = put("bottom_bar", v)
+    var autoHideBar: Boolean
+        get() = bool("auto_hide_bar", true)
+        set(v) = put("auto_hide_bar", v)
+    var pullToRefresh: Boolean
+        get() = bool("pull_to_refresh", true)
+        set(v) = put("pull_to_refresh", v)
     var darkPages: Boolean
         get() = bool("dark_pages", true)
         set(v) = put("dark_pages", v)
