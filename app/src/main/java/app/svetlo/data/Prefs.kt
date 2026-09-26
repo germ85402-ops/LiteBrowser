@@ -58,6 +58,19 @@ object Prefs {
     var onboarded: Boolean
         get() = bool("onboarded", false)
         set(v) = put("onboarded", v)
+    var readerFont: Int
+        get() = sp.getInt("reader_font", 19)
+        set(v) = sp.edit().putInt("reader_font", v).apply()
+    /** Reader theme index, -1 follows the system theme. */
+    var readerTheme: Int
+        get() = sp.getInt("reader_theme", -1)
+        set(v) = sp.edit().putInt("reader_theme", v).apply()
+    var readerSerif: Boolean
+        get() = bool("reader_serif", false)
+        set(v) = put("reader_serif", v)
+    var pictureInPicture: Boolean
+        get() = bool("pip", true)
+        set(v) = put("pip", v)
 
     private val HOST_LIKE = Regex("""^([a-z0-9-]+\.)+[a-z]{2,}(:\d+)?(/.*)?$|^localhost(:\d+)?(/.*)?$|^\d{1,3}(\.\d{1,3}){3}(:\d+)?(/.*)?$""", RegexOption.IGNORE_CASE)
 

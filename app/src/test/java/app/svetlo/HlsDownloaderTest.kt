@@ -9,67 +9,22 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayOutputStream
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 import java.nio.ByteBuffer
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 class HlsDownloaderTest {
-    private lateinit var server: ServerSocket
-    private val routes = HashMap<String, ByteArray>()
-    private val base get() = "http://127.0.0.1:${server.localPort}"
+    private lateinit var server: TestServer
+    private val routes get() = server.routes
+    private val delays get() = server.delays
+    private val maxActive get() = server.maxActive
+    private val base get() = server.base
 
-    private val delays = HashMap<String, Long>()
-    private val active = AtomicInteger()
-    private val maxActive = AtomicInteger()
-
-    // Tiny HTTP/1.0 server (thread per connection, Range + per-path delays): android.jar on the
-    // test classpath hides com.sun.net.httpserver.
     @Before
     fun start() {
-        server = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
-        Thread {
-            while (!server.isClosed) {
-                val s = runCatching { server.accept() }.getOrNull() ?: break
-                Thread { runCatching { serve(s) } }.apply { isDaemon = true }.start()
-            }
-        }.apply { isDaemon = true }.start()
-    }
-
-    private fun serve(s: Socket) = s.use {
-        val reader = it.getInputStream().bufferedReader()
-        val path = reader.readLine().split(' ')[1].substringBefore('?')
-        var range: String? = null
-        while (true) {
-            val h = reader.readLine().orEmpty()
-            if (h.isEmpty()) break
-            if (h.startsWith("Range:", ignoreCase = true)) range = h.substringAfter(':').trim().removePrefix("bytes=")
-        }
-        maxActive.accumulateAndGet(active.incrementAndGet(), ::maxOf)
-        try {
-            delays[path]?.let(Thread::sleep)
-        } finally {
-            active.decrementAndGet()
-        }
-        val body = routes[path]
-        val out = it.getOutputStream()
-        if (body == null) out.write("HTTP/1.0 404 Not Found\r\nContent-Length: 0\r\n\r\n".toByteArray())
-        else if (range != null) {
-            val from = range.substringBefore('-').toInt()
-            val to = range.substringAfter('-').toInt()
-            val part = body.copyOfRange(from, to + 1)
-            out.write("HTTP/1.0 206 Partial Content\r\nContent-Length: ${part.size}\r\n\r\n".toByteArray())
-            out.write(part)
-        } else {
-            out.write("HTTP/1.0 200 OK\r\nContent-Length: ${body.size}\r\n\r\n".toByteArray())
-            out.write(body)
-        }
-        out.flush()
+        server = TestServer()
     }
 
     @After

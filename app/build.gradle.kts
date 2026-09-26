@@ -11,8 +11,21 @@ android {
         applicationId = "app.svetlo.browser"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+    }
+
+    // Release key comes from the environment (CI secrets or a local shell); see docs/RELEASE.md.
+    val releaseKeystore = System.getenv("SVETLO_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("SVETLO_STORE_PASSWORD")
+                keyAlias = System.getenv("SVETLO_KEY_ALIAS")
+                keyPassword = System.getenv("SVETLO_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -20,8 +33,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Debug key so the release APK is installable without a keystore; replace for store publishing.
-            signingConfig = signingConfigs.getByName("debug")
+            // Without a release key the APK is debug-signed so test builds stay installable.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

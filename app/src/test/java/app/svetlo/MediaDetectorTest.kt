@@ -86,8 +86,8 @@ class MediaDetectorTest {
         assertEquals("Big Buck.mp4\nФайл · files.y", items[1].label)
         assertTrue(items[0].isHls)
         assertEquals("Смешной кот", items[1].title)
-        assertFalse(items[2].isSupported)
-        assertTrue(items[2].label.contains("не поддерживается"))
+        assertTrue(items[2].isSupported)
+        assertTrue(items[2].label.contains("Поток DASH"))
         d.clear()
         assertEquals(0, d.count)
     }

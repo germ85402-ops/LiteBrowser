@@ -6,7 +6,6 @@ import android.os.Looper
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import app.svetlo.data.Prefs
-import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -102,18 +101,29 @@ object AdBlock {
         }
     }
 
-    /** Script injected after each page commit: element hiding CSS plus site-specific helpers. */
+    private val scripts by lazy { PageScripts(app.assets.open("adblock.js").bufferedReader().use { it.readText() }) }
+
+    /**
+     * Script injected after each page commit (onPageCommitVisible / onPageFinished): element hiding CSS,
+     * scriptlets (best-effort at this point, page scripts already run), the procedural cosmetic engine
+     * and site-specific helpers. Every part is guarded against running twice in one document.
+     */
     fun pageScript(host: String?): String? {
         if (host == null || !active(host)) return null
-        val css = engine.cssFor(host)
         val sb = StringBuilder()
-        if (css.isNotEmpty()) {
-            sb.append("(function(){if(document.getElementById('__lb_css'))return;var s=document.createElement('style');")
-                .append("s.id='__lb_css';s.textContent=").append(JSONObject.quote(css))
-                .append(";(document.head||document.documentElement).appendChild(s);})();")
-        }
+        scripts.page(engine.cssFor(host), engine.extrasFor(host))?.let { sb.append(it) }
         if (FilterEngine.domainMatches(host, "youtube.com")) sb.append(YOUTUBE_JS)
         return sb.toString().ifEmpty { null }
+    }
+
+    /**
+     * Scriptlets only, for injection as early as possible (onPageStarted via evaluateJavascript), before
+     * page scripts define what the scriptlets trap. Delivery into the new document is not guaranteed;
+     * [pageScript] repeats the same block and `window.__svS` makes whichever lands first win.
+     */
+    fun earlyScript(host: String?): String? {
+        if (host == null || !active(host)) return null
+        return scripts.scriptlets(engine.extrasFor(host).scriptlets)
     }
 
     /** YouTube serves ads from its own video hosts, so they are skipped client-side instead of blocked. */

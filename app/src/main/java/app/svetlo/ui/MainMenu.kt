@@ -49,7 +49,9 @@ class MainMenu(private val act: MainActivity) {
         item(R.id.mBookmarks) { act.openLibrary(bookmarks = true) }
         item(R.id.mDownloads) { act.openDownloads() }
         item(R.id.mFind, page) { act.startFind() }
+        item(R.id.mReader, page) { act.openReader() }
         item(R.id.mShare, page) { act.sharePage() }
+        item(R.id.mPrint, page) { act.printPage() }
         v.findViewById<CheckBox>(R.id.mDesktopCheck).isChecked = tab.desktop
         item(R.id.mDesktop, page) { act.toggleDesktop() }
         item(R.id.mAdblock) { act.openAdblockSettings() }

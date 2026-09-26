@@ -139,6 +139,22 @@ class FilterEngine {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 24
     }
 
+    // Procedural/style rules and scriptlets are domain-specific only and compiled lazily per host.
+    private val extHide = HashMap<String, MutableList<String>>()
+    private val extExcept = HashMap<String, MutableSet<String>>()
+    private val extExceptGeneric = HashSet<String>()
+    private val scriptletRules = HashMap<String, MutableList<String>>()
+    private val scriptletExcept = HashMap<String, MutableSet<String>>()
+    private val scriptletExceptGeneric = HashSet<String>()
+    private val extrasCache = object : LinkedHashMap<String, Extras>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Extras>?) = size > 24
+    }
+
+    /** Per-host extras: CSS from `:style`/`#$#`/native `:has`, procedural JS rule literals, scriptlet calls. */
+    class Extras(val css: String, val procedural: List<String>, val scriptlets: List<List<String>>) {
+        companion object { val EMPTY = Extras("", emptyList(), emptyList()) }
+    }
+
     var ruleCount = 0
         private set
 
@@ -252,17 +268,53 @@ class FilterEngine {
         if (selectors.isEmpty()) return ""
         // One invalid selector voids its whole rule, so keep groups small.
         val sb = StringBuilder(selectors.size * 32)
-        selectors.chunked(20).forEach { chunk ->
+        val (risky, safe) = selectors.partition { it.contains(":has(") } // unsupported before Chrome 105
+        risky.forEach { sb.append(it).append("{display:none!important}\n") }
+        safe.chunked(20).forEach { chunk ->
             chunk.joinTo(sb, ",")
             sb.append("{display:none!important}\n")
         }
         return sb.toString()
     }
 
+    @Synchronized
+    fun extrasFor(host: String): Extras {
+        val h = host.lowercase()
+        extrasCache[h]?.let { return it }
+        val e = computeExtras(h)
+        extrasCache[h] = e
+        return e
+    }
+
+    private fun computeExtras(host: String): Extras {
+        if (inHostSet(docAllow, host)) return Extras.EMPTY
+        val css = StringBuilder()
+        val proc = ArrayList<String>()
+        if (!inHostSet(elemhideAllow, host)) {
+            val sels = LinkedHashSet<String>()
+            val except = HashSet(extExceptGeneric)
+            forEachHostKey(host) { k ->
+                extHide[k]?.let { sels.addAll(it) }
+                extExcept[k]?.let { except.addAll(it) }
+            }
+            sels.removeAll(except)
+            sels.forEach { Procedural.compile(it)?.emit(css, proc) }
+        }
+        val calls = LinkedHashSet<String>()
+        val except = HashSet(scriptletExceptGeneric)
+        forEachHostKey(host) { k ->
+            scriptletRules[k]?.let { calls.addAll(it) }
+            scriptletExcept[k]?.let { except.addAll(it) }
+        }
+        val scriptlets = if ("" in except) emptyList() else calls.filter { it !in except }.map(Scriptlets::decode)
+        if (css.isEmpty() && proc.isEmpty() && scriptlets.isEmpty()) return Extras.EMPTY
+        return Extras(css.toString(), proc, scriptlets)
+    }
+
     // ---------------------------------------------------------------- parsing
 
     private fun addLine(line: String) {
-        if (line.isEmpty() || line[0] == '!' || line[0] == '[' || line[0] == '#' && !line.startsWith("##") && !line.startsWith("#@#")) return
+        if (line.isEmpty() || line[0] == '!' || line[0] == '[' || line[0] == '#' && !line.startsWith("##") && !line.startsWith("#@")) return
 
         // hosts-file format: "0.0.0.0 domain"
         if (line.startsWith("0.0.0.0") || line.startsWith("127.0.0.1")) {
@@ -273,9 +325,36 @@ class FilterEngine {
 
         val cos = findCosmeticSeparator(line)
         if (cos != null) {
-            val (idx, sepLen, exception) = cos
-            if (idx < 0) return // unsupported extended syntax
-            addCosmetic(line.substring(0, idx), line.substring(idx + sepLen).trim(), exception)
+            val (idx, sep) = cos
+            val domains = line.substring(0, idx)
+            val body = line.substring(idx + sep.length).trim()
+            val exception = sep.startsWith("#@")
+            when (sep.replace("@", "")) {
+                "##" -> when {
+                    body.startsWith("+js(") && body.endsWith(")") ->
+                        addScriptlet(domains, Scriptlets.parseCall(body.substring(4, body.length - 1)), exception)
+                    body.startsWith("^") || body.startsWith("+") -> Unit // HTML filtering
+                    // Generic native `:has()` stays plain CSS; other procedural rules need a domain.
+                    Procedural.isProcedural(body) && !(isSupportedSelector(body) && parseDomains(domains).first.isEmpty()) ->
+                        addExt(domains, body, exception)
+                    else -> addCosmetic(domains, body, exception)
+                }
+                "#?#" -> if (Procedural.isProcedural(body)) addExt(domains, body, exception) else addCosmetic(domains, body, exception)
+                "#$#", "#$?#" -> {
+                    val open = body.lastIndexOf('{')
+                    if (open > 0 && body.endsWith("}")) {
+                        val sel = body.substring(0, open).trim()
+                        val decl = body.substring(open + 1, body.length - 1).trim()
+                        val canonical = if (decl.replace(" ", "").removeSuffix(";") == "remove:true") "$sel:remove()" else "$sel:style($decl)"
+                        addExt(domains, canonical, exception)
+                    } else if (sep.replace("@", "") == "#$#") {
+                        Scriptlets.parseAbp(body).forEach { addScriptlet(domains, it, exception) }
+                    }
+                }
+                "#%#" -> if (body.startsWith("//scriptlet(") && body.endsWith(")")) {
+                    addScriptlet(domains, Scriptlets.parseCall(body.substring(12, body.length - 1)), exception)
+                }
+            }
             return
         }
 
@@ -284,22 +363,53 @@ class FilterEngine {
         addNetwork(line)
     }
 
-    /** Returns (index, separatorLength, isException); index -1 means unsupported cosmetic syntax. */
-    private fun findCosmeticSeparator(line: String): Triple<Int, Int, Boolean>? {
+    /** Returns (index, separator) for `##`, `#?#`, `#$#`, `#$?#`, `#%#` and their `#@` exceptions. */
+    private fun findCosmeticSeparator(line: String): Pair<Int, String>? {
         val i = line.indexOf('#')
         if (i < 0) return null
         val prefix = line.substring(0, i)
         if (prefix.any { it == '/' || it == '|' || it == '$' || it == '^' || it == '=' }) return null
-        val rest = line.substring(i)
-        return when {
-            rest.startsWith("#@#") -> Triple(i, 3, true)
-            rest.startsWith("##+") || rest.startsWith("##^") -> Triple(-1, 0, false)
-            rest.startsWith("##") -> Triple(i, 2, false)
-            rest.startsWith("#?#") || rest.startsWith("#$#") || rest.startsWith("#%#") ||
-                rest.startsWith("#@?#") || rest.startsWith("#@$#") || rest.startsWith("#@%#") ||
-                rest.startsWith("#$?#") || rest.startsWith("#@$?#") -> Triple(-1, 0, false)
-            else -> null
+        return SEPARATORS.firstOrNull { line.startsWith(it, i) }?.let { i to it }
+    }
+
+    private fun parseDomains(domains: String): Pair<List<String>, List<String>> {
+        val inc = ArrayList<String>()
+        val exc = ArrayList<String>()
+        domains.split(',').forEach {
+            val d = it.trim().lowercase()
+            if (d.startsWith("~")) exc.add(d.substring(1)) else if (d.isNotEmpty()) inc.add(d)
         }
+        return inc to exc
+    }
+
+    /** Domain-specific rules only: generic procedural rules and scriptlets are skipped like in uBO. */
+    private fun addSpecific(
+        domains: String, key: String, exception: Boolean,
+        rules: HashMap<String, MutableList<String>>, except: HashMap<String, MutableSet<String>>, exceptGeneric: MutableSet<String>,
+    ) {
+        val (inc, exc) = parseDomains(domains)
+        if (exception) {
+            if (inc.isEmpty()) exceptGeneric.add(key) else inc.forEach { except.getOrPut(it) { HashSet(2) }.add(key) }
+        } else {
+            if (inc.isEmpty()) return
+            inc.forEach { rules.getOrPut(it) { ArrayList(2) }.add(key) }
+            exc.forEach { except.getOrPut(it) { HashSet(2) }.add(key) }
+        }
+        ruleCount++
+    }
+
+    private fun addExt(domains: String, sel: String, exception: Boolean) {
+        if (sel.isEmpty() || sel.length > 1000) return
+        addSpecific(domains, sel, exception, extHide, extExcept, extExceptGeneric)
+        // A generic CSS `:has()` rule may be excepted with `site#@#...:has(...)`.
+        if (exception && domains.isNotEmpty() && isSupportedSelector(sel)) {
+            parseDomains(domains).first.forEach { specificExcept.getOrPut(it) { HashSet() }.add(sel) }
+        }
+    }
+
+    private fun addScriptlet(domains: String, call: List<String>?, exception: Boolean) {
+        if (call == null || call.isEmpty() && !exception) return
+        addSpecific(domains, Scriptlets.encode(call), exception, scriptletRules, scriptletExcept, scriptletExceptGeneric)
     }
 
     private fun addCosmetic(domains: String, sel: String, exception: Boolean) {
@@ -507,6 +617,7 @@ class FilterEngine {
         private val COMMON_TOKENS = setOf("http", "https", "www", "com", "net", "org", "ru", "js", "html", "php", "static", "cdn")
         private val FILE_EXT = setOf("js", "css", "php", "html", "htm", "gif", "png", "jpg", "jpeg", "swf", "json", "xml", "txt", "mp4", "aspx", "asp", "cgi", "svg", "webp")
         private val SLDS = setOf("co", "com", "net", "org", "gov", "edu", "ac", "or", "ne", "go", "ltd", "plc", "mil", "nic", "msk", "spb")
+        private val SEPARATORS = listOf("#@$?#", "#@?#", "#@$#", "#@%#", "#@#", "#$?#", "#?#", "#$#", "#%#", "##")
         private val PROCEDURAL = listOf(
             ":-abp-", ":has-text", ":contains(", ":matches-css", ":xpath", ":upward", ":remove", ":style(",
             ":min-text-length", ":watch-attr", ":matches-path", ":others", ":nth-ancestor", ":matches-attr",

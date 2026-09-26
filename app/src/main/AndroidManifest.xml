@@ -35,6 +35,8 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -78,6 +80,10 @@
             android:name=".ui.SettingsActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.ReaderActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false" />
+        <activity
             android:name=".ui.OnboardingActivity"
             android:exported="false" />
         <activity
@@ -87,5 +93,8 @@
             android:name=".ui.LibraryActivity"
             android:exported="false"
             android:windowSoftInputMode="stateHidden" />
+        <activity
+            android:name=".ui.DownloadsActivity"
+            android:exported="false" />
     </application>
 </manifest>

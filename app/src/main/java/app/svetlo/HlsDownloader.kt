@@ -32,11 +32,13 @@ class HlsDownloader(
     /** [offset]/[length] are -1 unless the segment is an EXT-X-BYTERANGE sub-range. */
     class Segment(val url: String, val key: Key?, val seq: Long, val offset: Long = -1, val length: Long = -1)
 
-    class Playlist(val init: Segment?, val segments: List<Segment>) {
+    /** [ext] forces the file extension (DASH knows its container from the manifest). */
+    class Playlist(val init: Segment?, val segments: List<Segment>, private val ext: String? = null) {
         val isFmp4: Boolean get() = init != null
 
         /** File extension for the concatenated stream. */
         fun extension(audio: Boolean = false): String {
+            if (ext != null) return ext
             if (init != null) return if (audio) "m4a" else "mp4"
             val path = segments.first().url.substringBefore('?').lowercase()
             return when {
@@ -49,6 +51,8 @@ class HlsDownloader(
         fun mime(audio: Boolean = false): String = when (extension(audio)) {
             "mp4" -> "video/mp4"
             "m4a" -> "audio/mp4"
+            "webm" -> "video/webm"
+            "weba" -> "audio/webm"
             "aac" -> "audio/aac"
             "mp3" -> "audio/mpeg"
             else -> "video/mp2t"
@@ -165,6 +169,24 @@ class HlsDownloader(
     private fun checkCancelled() {
         if (isCancelled() || Thread.currentThread().isInterrupted) throw InterruptedException("cancelled")
     }
+
+    internal fun fetchText(url: String): String = fetchWithRetry(url).decodeToString()
+
+    /** Total size via a 1-byte Range probe; -1 when unknown or the server ignores ranges. */
+    internal fun contentLength(url: String): Long = runCatching {
+        checkCancelled()
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 15000
+        conn.readTimeout = 30000
+        headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
+        conn.setRequestProperty("Range", "bytes=0-0")
+        try {
+            if (conn.responseCode != 206) -1L
+            else conn.getHeaderField("Content-Range")?.substringAfter('/')?.trim()?.toLongOrNull() ?: -1L
+        } finally {
+            conn.disconnect()
+        }
+    }.getOrDefault(-1L)
 
     private fun fetchWithRetry(url: String, offset: Long = -1, length: Long = -1): ByteArray {
         var last: Exception? = null
