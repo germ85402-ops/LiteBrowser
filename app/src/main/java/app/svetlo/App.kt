@@ -15,6 +15,7 @@ class App : Application() {
             Incognito.wipe(this, fromMainProcess = true)
         }
         Prefs.init(this)
+        DownloadRegistry.init(this)
         BrowserDb.init(this)
         AdBlock.init(this)
     }
