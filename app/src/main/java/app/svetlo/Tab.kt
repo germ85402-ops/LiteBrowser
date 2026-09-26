@@ -2,8 +2,11 @@ package app.svetlo
 
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Bundle
 import android.webkit.WebView
 import java.util.concurrent.atomic.AtomicInteger
+
+class PageError(val url: String, val title: String, val text: String)
 
 class Tab(var url: String, var title: String = "") {
     var web: WebView? = null
@@ -17,6 +20,9 @@ class Tab(var url: String, var title: String = "") {
     var isPopup = false
     var popupChecked = false
     var openerHost: String? = null
+    /** WebView history restored from disk, applied when the tab is first shown. */
+    var savedState: Bundle? = null
+    var error: PageError? = null
 
     @Volatile var pageHost: String? = null
     val blocked = AtomicInteger()

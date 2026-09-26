@@ -206,7 +206,7 @@ class TabSwitcher(
             v.findViewById<TextView>(R.id.tabTitle).text = tab.displayTitle()
             val icon = v.findViewById<ImageView>(R.id.tabIcon)
             when {
-                tab.isNtp -> icon.setImageResource(if (incognito) R.drawable.ic_incognito_small else R.drawable.ic_launcher)
+                tab.isNtp -> icon.setImageResource(if (incognito) R.drawable.ic_incognito_small else R.drawable.ic_brand)
                 tab.favicon != null -> icon.setImageBitmap(tab.favicon)
                 else -> icon.setImageDrawable(LetterIcon(tab.url))
             }

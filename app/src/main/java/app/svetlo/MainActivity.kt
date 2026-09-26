@@ -2,6 +2,9 @@ package app.svetlo
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
@@ -13,13 +16,27 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.os.Parcel
+import android.os.SystemClock
 import android.speech.RecognizerIntent
+import android.text.InputType
+import android.util.Base64
+import android.view.animation.DecelerateInterpolator
+import android.webkit.GeolocationPermissions
+import android.webkit.HttpAuthHandler
+import android.webkit.JavascriptInterface
+import android.webkit.MimeTypeMap
+import android.webkit.PermissionRequest
+import android.webkit.SslErrorHandler
+import android.webkit.WebResourceError
 import android.graphics.Rect
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
@@ -64,6 +81,7 @@ import app.svetlo.ui.TopCropImageView
 import app.svetlo.ui.LibraryActivity
 import app.svetlo.ui.MainMenu
 import app.svetlo.ui.NewTabPage
+import app.svetlo.ui.OnboardingActivity
 import app.svetlo.ui.SettingsActivity
 import app.svetlo.ui.Suggestions
 import app.svetlo.ui.TabSwitcher
@@ -74,6 +92,12 @@ import app.svetlo.ui.showKeyboard
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
@@ -115,12 +139,27 @@ open class MainActivity : Activity() {
     private var fullscreenView: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private var savedUiFlags = 0
-    private var pendingDownload: (() -> Unit)? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var barsHidden = false
     private var scrollAccum = 0
+    private var ignoreScrollUntil = 0L
+    private var barShift = 0f
+    private var barAnim: ValueAnimator? = null
     private var swipeTarget: Tab? = null
     private var lastTabCount = -1
+
+    private val pendingPermissions = HashMap<Int, () -> Unit>()
+    private var nextPermissionCode = 100
+    /** Per-session site decisions, keyed by "host|what". */
+    private val siteDecisions = HashMap<String, Boolean>()
+    private val sslAllowed = HashSet<String>()
+    private val sslPending = HashMap<String, MutableList<SslErrorHandler>>()
+    private var siteDialog: AlertDialog? = null
+    private val blobJobs = ConcurrentHashMap<String, Pair<OutputTarget, String>>()
+
+    private lateinit var errorView: LinearLayout
+    private lateinit var errorTitle: TextView
+    private lateinit var errorText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -152,9 +191,10 @@ open class MainActivity : Activity() {
             elevation = dp(2).toFloat()
         }
         webContainer.addView(swipePeek, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        pull = PullRefresh(this, webContainer) { current?.web?.reload() }
+        pull = PullRefresh(this, webContainer) { current?.let { reloadTab(it) } }
 
         ntp = NewTabPage(this, findViewById(R.id.ntp), ::navigate, { urlBar.showKeyboard() }, incognito)
+        buildErrorView()
         switcher = TabSwitcher(
             this, findViewById(R.id.tabSwitcher), zoomOverlay, tabs, incognito, { current }, ::pageRect,
             onSelect = { selectTab(it) },
@@ -174,11 +214,18 @@ open class MainActivity : Activity() {
         if (!incognito) restoreTabs()
         if (!handleIntent(intent) && tabs.isEmpty()) newTab(null, focus = false)
         if (current == null) selectTab(tabs.last())
+        if (!incognito && !Prefs.onboarded) {
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(this, OnboardingActivity::class.java), REQ_ONBOARDING)
+        }
     }
 
     // ------------------------------------------------------------------ toolbar
 
     private fun setupToolbar() {
+        // Drawn above the page while it slides over it; no outline so it casts no shadow.
+        toolbar.outlineProvider = null
+        toolbar.elevation = dp(1).toFloat()
         findViewById<View>(R.id.btnHome).setOnClickListener { goHome() }
         findViewById<View>(R.id.btnTabs).setOnClickListener { openSwitcher() }
         findViewById<View>(R.id.btnTabs).setOnLongClickListener { v -> showTabsPopup(v); true }
@@ -279,6 +326,7 @@ open class MainActivity : Activity() {
         val videos = tab.media.count
         mediaFab.visibility = if (videos > 0 && !tab.isNtp && !focused) View.VISIBLE else View.GONE
         mediaFab.text = if (videos == 1) "Скачать видео" else "Видео · $videos"
+        updateErrorView()
     }
 
     private fun displayUrl(url: String): String {
@@ -330,7 +378,13 @@ open class MainActivity : Activity() {
             ntp.view.visibility = View.VISIBLE
         } else {
             val web = ensureWeb(tab)
-            if (!tab.loaded) { web.loadUrl(tab.url); tab.loaded = true }
+            if (!tab.loaded) {
+                val state = tab.savedState
+                tab.savedState = null
+                val restored = state != null && runCatching { web.restoreState(state) }.getOrNull() != null
+                if (!restored) web.loadUrl(tab.url)
+                tab.loaded = true
+            }
             web.visibility = View.VISIBLE
             web.onResume()
             ntp.view.visibility = View.GONE
@@ -448,21 +502,63 @@ open class MainActivity : Activity() {
 
     private fun saveTabs() {
         if (incognito) return
+        val saved = tabs.filter { it.url.isNotEmpty() && it.url != "about:blank" }
         val arr = JSONArray()
-        tabs.forEach { arr.put(JSONObject().put("u", it.url).put("t", it.title)) }
-        Prefs.sp.edit().putString("tabs", arr.toString()).putInt("tab_cur", tabs.indexOf(current)).apply()
+        saved.forEach { arr.put(JSONObject().put("u", it.url).put("t", it.title)) }
+        Prefs.sp.edit().putString("tabs", arr.toString()).putInt("tab_cur", saved.indexOf(current)).apply()
+        // Back/forward history lives in a separate file; a stale or unreadable file only loses history.
+        val p = Parcel.obtain()
+        try {
+            p.writeInt(STATE_VERSION)
+            p.writeInt(saved.size)
+            saved.forEach { t ->
+                val state = if (t.isNtp) null
+                else t.web?.let { w -> Bundle().takeIf { runCatching { w.saveState(it) }.getOrNull() != null } } ?: t.savedState
+                p.writeString(t.url)
+                p.writeBundle(state)
+            }
+            stateFile().writeBytes(p.marshall())
+        } catch (_: Exception) {
+            stateFile().delete()
+        } finally {
+            p.recycle()
+        }
+    }
+
+    private fun stateFile() = File(noBackupFilesDir, "tabs.state")
+
+    private fun readTabStates(): List<Pair<String?, Bundle?>> {
+        val f = stateFile()
+        if (!f.exists()) return emptyList()
+        val p = Parcel.obtain()
+        return try {
+            val bytes = f.readBytes()
+            p.unmarshall(bytes, 0, bytes.size)
+            p.setDataPosition(0)
+            if (p.readInt() != STATE_VERSION) return emptyList()
+            List(p.readInt()) { p.readString() to p.readBundle(javaClass.classLoader) }
+        } catch (_: Exception) {
+            emptyList()
+        } finally {
+            p.recycle()
+        }
     }
 
     private fun restoreTabs() {
         val arr = runCatching { JSONArray(Prefs.sp.getString("tabs", "[]")) }.getOrNull() ?: return
+        val states = readTabStates()
+        var cur: Tab? = null
+        val curIdx = Prefs.sp.getInt("tab_cur", arr.length() - 1)
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
             val url = o.optString("u")
             if (url.isEmpty() || url == "about:blank") continue
-            tabs += Tab(url, o.optString("t"))
+            val tab = Tab(url, o.optString("t"))
+            states.getOrNull(i)?.takeIf { it.first == url }?.let { tab.savedState = it.second }
+            tabs += tab
+            if (i == curIdx) cur = tab
         }
-        val cur = Prefs.sp.getInt("tab_cur", tabs.size - 1)
-        tabs.getOrNull(cur)?.let { selectTab(it) }
+        (cur ?: tabs.lastOrNull())?.let { selectTab(it) }
     }
 
     // ------------------------------------------------------------------ navigation
@@ -561,6 +657,7 @@ open class MainActivity : Activity() {
         tab.web = null
         tab.loaded = false
         tab.progress = 100
+        tab.error = null
         tab.media.clear()
         tab.blocked.set(0)
     }
@@ -582,12 +679,14 @@ open class MainActivity : Activity() {
         applySettings(web, tab)
         web.webViewClient = TabClient(tab)
         web.webChromeClient = TabChrome(tab)
+        web.addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
         web.setDownloadListener { url, _, disposition, mime, _ ->
-            val name = URLUtil.guessFileName(url, disposition, mime)
+            val name = fileNameFor(url, disposition, mime)
             AlertDialog.Builder(this).setTitle("Скачать файл?").setMessage(name)
-                .setPositiveButton("Скачать") { _, _ -> downloadDirect(url, name, tab) }
+                .setPositiveButton("Скачать") { _, _ -> startDownload(url, name, mime, tab) }
                 .setNegativeButton("Отмена", null).show()
-            if (tab.web?.canGoBack() != true && tab.isPopup) closeTab(tab)
+            // blob: data is read from the page itself, so its tab must stay alive.
+            if (tab.web?.canGoBack() != true && tab.isPopup && !url.startsWith("blob:")) closeTab(tab)
         }
         web.setOnLongClickListener { onLongPress(tab) }
         web.setOnScrollChangeListener { _, _, y, _, oldY -> onPageScroll(tab, y, oldY) }
@@ -641,6 +740,7 @@ open class MainActivity : Activity() {
                 tab.pageHost = req.url.host?.lowercase()
                 tab.blocked.set(0)
                 tab.media.clear()
+                if (tab.error != null) main.post { tab.error = null; if (tab === current) updateErrorView() }
                 if (tab.isPopup && !tab.popupChecked) {
                     tab.popupChecked = true
                     if (AdBlock.blocksNavigation(url, tab.openerHost)) {
@@ -681,6 +781,7 @@ open class MainActivity : Activity() {
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             injectedFor = null
+            if (tab.error?.url != url) tab.error = null
             if (tab === current) showBars()
             tab.url = url
             tab.pageHost = Uri.parse(url).host?.lowercase()
@@ -718,6 +819,40 @@ open class MainActivity : Activity() {
             if (tab === current) selectTab(tab)
             return true
         }
+
+        override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
+            if (!req.isForMainFrame) return
+            val code = err.errorCode
+            if (code == ERROR_UNSUPPORTED_SCHEME || code == ERROR_UNKNOWN) return
+            val url = req.url.toString()
+            val host = req.url.host?.removePrefix("www.") ?: url
+            val (title, text) = when {
+                !isOnline() -> "Нет подключения к интернету" to "Проверьте Wi‑Fi или мобильный интернет и попробуйте снова."
+                code == ERROR_HOST_LOOKUP -> "Сайт не найден" to "Не удалось найти адрес $host. Проверьте, нет ли в нём опечатки."
+                code == ERROR_CONNECT || code == ERROR_TIMEOUT -> "Сайт не отвечает" to "$host слишком долго не отвечает или отклонил подключение."
+                code == ERROR_FAILED_SSL_HANDSHAKE -> "Не удалось установить защищённое соединение" to "$host использует неподдерживаемый протокол или неверный сертификат."
+                code == ERROR_REDIRECT_LOOP -> "Слишком много переадресаций" to "Попробуйте удалить cookie для $host."
+                else -> "Не удалось открыть страницу" to "$host: ${err.description}"
+            }
+            tab.error = PageError(url, title, text)
+            if (tab === current) updateErrorView()
+        }
+
+        override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+            val host = Uri.parse(error.url).host?.lowercase()
+            when {
+                host == null -> handler.cancel()
+                host in sslAllowed -> handler.proceed()
+                // Only the page's own host gets a prompt; broken third-party resources are dropped.
+                tab !== current || host != tab.pageHost -> handler.cancel()
+                sslPending.containsKey(host) -> sslPending.getValue(host) += handler
+                else -> askSslProceed(host, error, handler)
+            }
+        }
+
+        override fun onReceivedHttpAuthRequest(view: WebView, handler: HttpAuthHandler, host: String, realm: String?) {
+            askHttpAuth(host, realm, handler)
+        }
     }
 
     private inner class TabChrome(private val tab: Tab) : WebChromeClient() {
@@ -731,6 +866,7 @@ open class MainActivity : Activity() {
 
         override fun onReceivedTitle(view: WebView, title: String) {
             tab.title = title
+            tab.media.pageTitle = title
             if (!incognito) BrowserDb.updateTitle(tab.url, title)
         }
 
@@ -778,6 +914,19 @@ open class MainActivity : Activity() {
 
         override fun onHideCustomView() = exitFullscreen()
 
+        override fun onPermissionRequest(request: PermissionRequest) = onSitePermission(request)
+
+        override fun onPermissionRequestCanceled(request: PermissionRequest) {
+            siteDialog?.dismiss()
+        }
+
+        override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) =
+            onGeolocationPrompt(origin, callback)
+
+        override fun onGeolocationPermissionsHidePrompt() {
+            siteDialog?.dismiss()
+        }
+
         override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
             fileCallback?.onReceiveValue(null)
             fileCallback = callback
@@ -822,8 +971,181 @@ open class MainActivity : Activity() {
     // ------------------------------------------------------------------ page actions
 
     internal fun reloadOrStop() {
-        val web = current?.web ?: return
-        if ((current?.progress ?: 100) < 100) web.stopLoading() else web.reload()
+        val tab = current ?: return
+        val web = tab.web ?: return
+        if (tab.progress < 100) web.stopLoading() else reloadTab(tab)
+    }
+
+    private fun reloadTab(tab: Tab) {
+        val web = tab.web ?: return
+        val failed = tab.error?.url
+        if (failed != null) web.loadUrl(failed) else web.reload()
+    }
+
+    // ------------------------------------------------------------------ error page
+
+    private fun buildErrorView() {
+        errorView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setBackgroundColor(color(R.color.c_bg))
+            setPadding(dp(32), dp(72), dp(32), dp(32))
+            visibility = View.GONE
+            isClickable = true
+        }
+        errorView.addView(ImageView(this).apply { setImageResource(R.drawable.ic_globe); alpha = 0.7f; scaleX = 2f; scaleY = 2f },
+            LinearLayout.LayoutParams(dp(48), dp(48)).apply { bottomMargin = dp(28) })
+        errorTitle = TextView(this).apply {
+            textSize = 20f
+            setTextColor(color(R.color.c_text))
+            gravity = Gravity.CENTER
+        }
+        errorText = TextView(this).apply {
+            textSize = 14f
+            setTextColor(color(R.color.c_text2))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(28))
+        }
+        errorView.addView(errorTitle)
+        errorView.addView(errorText)
+        errorView.addView(TextView(this).apply {
+            text = "Повторить"
+            textSize = 15f
+            setTextColor(color(R.color.c_on_accent))
+            setBackgroundResource(R.drawable.bg_fab)
+            gravity = Gravity.CENTER
+            setPadding(dp(28), 0, dp(28), 0)
+            setOnClickListener { current?.let { reloadTab(it) } }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
+        // Above the WebViews (added at index 0) but below the NTP, suggestions and overlays.
+        webContainer.addView(errorView, webContainer.indexOfChild(ntp.view),
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
+    private fun updateErrorView() {
+        val err = current?.takeIf { !it.isNtp }?.error
+        if (err == null) { errorView.visibility = View.GONE; return }
+        errorTitle.text = err.title
+        errorText.text = err.text
+        errorView.visibility = View.VISIBLE
+    }
+
+    private fun isOnline(): Boolean {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return true
+        return runCatching { cm.activeNetwork != null }.getOrDefault(true)
+    }
+
+    // ------------------------------------------------------------------ site prompts
+
+    private fun askSslProceed(host: String, error: SslError, handler: SslErrorHandler) {
+        val handlers = mutableListOf(handler)
+        sslPending[host] = handlers
+        val reason = when (error.primaryError) {
+            SslError.SSL_EXPIRED -> "Срок действия сертификата истёк."
+            SslError.SSL_NOTYETVALID -> "Сертификат ещё не вступил в силу."
+            SslError.SSL_IDMISMATCH -> "Сертификат выдан для другого сайта."
+            SslError.SSL_UNTRUSTED -> "Сертификат выдан недоверенным центром."
+            SslError.SSL_DATE_INVALID -> "У сертификата неверная дата."
+            else -> "Сертификат недействителен."
+        }
+        var proceed = false
+        AlertDialog.Builder(this)
+            .setTitle("Подключение не защищено")
+            .setMessage("$reason\n\nЗлоумышленники могут пытаться похитить ваши данные с сайта $host (например, пароли или номера карт).")
+            .setPositiveButton("Назад", null)
+            .setNegativeButton("Всё равно открыть") { _, _ -> proceed = true }
+            .setOnDismissListener {
+                sslPending.remove(host)
+                if (proceed) { sslAllowed += host; handlers.forEach { it.proceed() } } else handlers.forEach { it.cancel() }
+            }
+            .show()
+    }
+
+    private fun askHttpAuth(host: String, realm: String?, handler: HttpAuthHandler) {
+        val user = EditText(this).apply { hint = "Имя пользователя"; setSingleLine() }
+        val pass = EditText(this).apply {
+            hint = "Пароль"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(user)
+            addView(pass)
+        }
+        var done = false
+        AlertDialog.Builder(this)
+            .setTitle("Вход на $host")
+            .setMessage(realm?.takeIf { it.isNotBlank() }?.let { "Сайт требует авторизацию: «$it»" } ?: "Сайт требует имя пользователя и пароль")
+            .setView(box)
+            .setPositiveButton("Войти") { _, _ -> done = true; handler.proceed(user.text.toString(), pass.text.toString()) }
+            .setNegativeButton("Отмена", null)
+            .setOnDismissListener { if (!done) handler.cancel() }
+            .show()
+        user.showKeyboard()
+    }
+
+    /** Asks once per host and session, then requests the matching Android runtime permissions. */
+    private fun askSite(host: String, what: String, key: String, perms: List<String>, anyOf: Boolean, onResult: (Boolean) -> Unit) {
+        val grantAndroid = {
+            requestAppPermissions(perms) {
+                val ok = if (anyOf) perms.any(::hasPermission) else perms.all(::hasPermission)
+                if (!ok) toast("Нет разрешения Android на доступ к $what")
+                onResult(ok)
+            }
+        }
+        when (siteDecisions["$host|$key"]) {
+            true -> { grantAndroid(); return }
+            false -> { onResult(false); return }
+            null -> Unit
+        }
+        siteDialog?.dismiss()
+        var decided: Boolean? = null
+        siteDialog = AlertDialog.Builder(this)
+            .setTitle(host)
+            .setMessage("Сайт запрашивает доступ к $what")
+            .setPositiveButton("Разрешить") { _, _ -> decided = true }
+            .setNegativeButton("Запретить") { _, _ -> decided = false }
+            .setOnDismissListener {
+                siteDialog = null
+                decided?.let { siteDecisions["$host|$key"] = it }
+                if (decided == true) grantAndroid() else onResult(false)
+            }
+            .show()
+    }
+
+    private fun onSitePermission(request: PermissionRequest) {
+        val wanted = request.resources.filter {
+            it == PermissionRequest.RESOURCE_VIDEO_CAPTURE || it == PermissionRequest.RESOURCE_AUDIO_CAPTURE ||
+                it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+        }
+        if (wanted.isEmpty()) { request.deny(); return }
+        val cam = PermissionRequest.RESOURCE_VIDEO_CAPTURE in wanted
+        val mic = PermissionRequest.RESOURCE_AUDIO_CAPTURE in wanted
+        // Protected media (Widevine) needs no hardware access; grant it like other browsers do.
+        if (!cam && !mic) { request.grant(wanted.toTypedArray()); return }
+        val what = when { cam && mic -> "камере и микрофону"; cam -> "камере"; else -> "микрофону" }
+        val perms = buildList { if (cam) add(Manifest.permission.CAMERA); if (mic) add(Manifest.permission.RECORD_AUDIO) }
+        askSite(request.origin.host ?: "Сайт", what, "media:$cam:$mic", perms, anyOf = false) { ok ->
+            runCatching { if (ok) request.grant(wanted.toTypedArray()) else request.deny() }
+        }
+    }
+
+    private fun onGeolocationPrompt(origin: String, callback: GeolocationPermissions.Callback) {
+        val perms = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        askSite(Uri.parse(origin).host ?: origin, "вашему местоположению", "geo", perms, anyOf = true) { ok ->
+            callback.invoke(origin, ok, false)
+        }
+    }
+
+    private fun hasPermission(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestAppPermissions(perms: List<String>, then: () -> Unit) {
+        val missing = perms.filterNot(::hasPermission)
+        if (missing.isEmpty()) { then(); return }
+        val code = nextPermissionCode++
+        pendingPermissions[code] = then
+        requestPermissions(missing.toTypedArray(), code)
     }
 
     internal fun toggleBookmark() {
@@ -880,7 +1202,7 @@ open class MainActivity : Activity() {
                 val url = data?.getStringExtra(LibraryActivity.EXTRA_URL) ?: return
                 if (data.getBooleanExtra(LibraryActivity.EXTRA_NEW_TAB, false)) newTab(url) else navigate(url)
             }
-            REQ_SETTINGS -> {
+            REQ_SETTINGS, REQ_ONBOARDING -> {
                 applyToolbarPosition()
                 tabs.forEach { t -> t.web?.let { applySettings(it, t) } }
                 current?.web?.reload()
@@ -933,6 +1255,7 @@ open class MainActivity : Activity() {
     internal fun startFind() {
         val web = current?.web?.takeIf { current?.isNtp == false } ?: return
         web.setFindListener { active, count, _ -> findCount.text = if (count == 0) "0/0" else "${active + 1}/$count" }
+        showBars(animate = false)
         toolbar.visibility = View.GONE
         findBar.visibility = View.VISIBLE
         findInput.setText("")
@@ -962,31 +1285,67 @@ open class MainActivity : Activity() {
 
     internal fun showVideos() {
         val tab = current?.takeIf { !it.isNtp } ?: return
+        tab.media.pageTitle = tab.title.takeIf { it.isNotBlank() }
         scanMedia(tab) {
             val items = tab.media.list()
             if (items.isEmpty()) {
                 toast("Видео не найдено. Запустите воспроизведение и попробуйте снова.")
                 return@scanMedia
             }
+            val labels = items.map { if (it.isSupported) it.label else it.label + "\nDASH-поток не поддерживается" }
             AlertDialog.Builder(this)
                 .setTitle("Видео на странице")
-                .setItems(items.map { it.label }.toTypedArray()) { _, i -> startMediaDownload(tab, items[i]) }
+                .setItems(labels.toTypedArray()) { _, i ->
+                    val item = items[i]
+                    when {
+                        !item.isSupported -> toast("Этот формат (DASH) пока нельзя скачать")
+                        item.isHls -> chooseHlsQuality(tab, item)
+                        else -> startMediaDownload(tab, item, null)
+                    }
+                }
                 .setNegativeButton("Закрыть", null)
                 .show()
         }
     }
 
-    private fun startMediaDownload(tab: Tab, item: MediaItem) {
+    /** Loads the stream's quality list off the main thread, then lets the user pick one. */
+    private fun chooseHlsQuality(tab: Tab, item: MediaItem) {
+        val headers = requestHeaders(item.url, tab)
+        toast("Получаю список качеств…")
+        Thread {
+            val variants = runCatching { HlsDownloader(headers) { false }.variants(item.url) }.getOrDefault(emptyList())
+            main.post {
+                if (isFinishing || isDestroyed) return@post
+                if (variants.size <= 1) { startMediaDownload(tab, item, variants.firstOrNull()); return@post }
+                val auto = HlsDownloader.pickDefault(variants)
+                val labels = listOf("Авто" + (auto?.let { " (${it.label})" } ?: "")) + variants.map { it.label }
+                AlertDialog.Builder(this)
+                    .setTitle("Качество видео")
+                    .setItems(labels.toTypedArray()) { _, i -> startMediaDownload(tab, item, if (i == 0) auto else variants[i - 1]) }
+                    .setNegativeButton("Отмена", null)
+                    .show()
+            }
+        }.start()
+    }
+
+    private fun startMediaDownload(tab: Tab, item: MediaItem, variant: HlsDownloader.Variant?) {
         if (item.isHls) {
             withStoragePermission {
                 if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                     requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY)
                 }
-                HlsDownloadService.start(this, item.url, requestHeaders(item.url, tab))
-                toast("Загрузка потока началась")
+                HlsDownloadService.start(
+                    this, item.url, requestHeaders(item.url, tab),
+                    title = item.title ?: tab.title.takeIf { it.isNotBlank() },
+                    variantUrl = variant?.url, audioUrl = variant?.audioUrl,
+                )
+                toast(if (variant?.audioUrl != null) "Загрузка началась. Звук сохранится отдельным файлом" else "Загрузка началась")
             }
         } else {
-            downloadDirect(item.url, URLUtil.guessFileName(item.url, null, null), tab)
+            val guessed = URLUtil.guessFileName(item.url, null, null)
+            val title = item.title ?: tab.title.takeIf { it.isNotBlank() }
+            val name = if (title != null) HlsDownloadService.fileBase(title) + "." + guessed.substringAfterLast('.', "mp4") else guessed
+            downloadDirect(item.url, name, tab)
         }
     }
 
@@ -995,6 +1354,79 @@ open class MainActivity : Activity() {
         tab?.url?.takeIf { it.startsWith("http") }?.let { h["Referer"] = it }
         CookieManager.getInstance().getCookie(url)?.let { h["Cookie"] = it }
         return h
+    }
+
+    private fun fileNameFor(url: String, disposition: String?, mime: String?): String {
+        if (url.startsWith("http")) return URLUtil.guessFileName(url, disposition, mime)
+        val fromHeader = disposition?.let { Regex("""filename\*?=(?:UTF-8'')?"?([^";]+)"?""", RegexOption.IGNORE_CASE).find(it) }
+            ?.groupValues?.get(1)?.let { Uri.decode(it).substringAfterLast('/').trim() }
+        if (!fromHeader.isNullOrBlank()) return fromHeader
+        val type = mime?.takeIf { it.isNotBlank() } ?: url.takeIf { it.startsWith("data:") }?.substringAfter(':')?.substringBefore(';')?.substringBefore(',')
+        val ext = type?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) } ?: "bin"
+        return "download_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + "." + ext
+    }
+
+    private fun startDownload(url: String, name: String, mime: String?, tab: Tab?) = when {
+        url.startsWith("blob:") -> downloadBlob(tab, url, name, mime)
+        url.startsWith("data:") -> downloadData(url, name)
+        else -> downloadDirect(url, name, tab)
+    }
+
+    private fun mimeFor(name: String, mime: String?) = mime?.takeIf { it.isNotBlank() && it != "application/octet-stream" }
+        ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())
+        ?: "application/octet-stream"
+
+    private fun downloadData(url: String, name: String) = withStoragePermission {
+        val mime = mimeFor(name, url.substringAfter(':').substringBefore(',').substringBefore(';'))
+        Thread {
+            val result = runCatching {
+                val meta = url.substringBefore(',')
+                val payload = url.substringAfter(',')
+                val bytes = if (meta.endsWith(";base64")) Base64.decode(payload, Base64.DEFAULT) else Uri.decode(payload).toByteArray()
+                val target = OutputTarget(this, name, mime)
+                try { target.stream.write(bytes); target.commit() } catch (e: Exception) { target.abort(); throw e }
+            }
+            main.post { toast(if (result.isSuccess) "Скачано: $name" else "Не удалось скачать: ${result.exceptionOrNull()?.message}") }
+        }.start()
+    }
+
+    /** blob: URLs only exist inside the page, so the page reads the blob and streams it back in chunks. */
+    private fun downloadBlob(tab: Tab?, url: String, name: String, mime: String?) = withStoragePermission {
+        val web = tab?.web ?: return@withStoragePermission
+        val target = runCatching { OutputTarget(this, name, mimeFor(name, mime)) }.getOrElse {
+            toast("Не удалось создать файл: ${it.message}"); return@withStoragePermission
+        }
+        val token = UUID.randomUUID().toString()
+        blobJobs[token] = target to name
+        toast("Скачивание: $name")
+        val js = """(function(u,t){var B=window.$BLOB_BRIDGE;fetch(u).then(function(r){return r.blob()}).then(function(b){
+            var o=0,S=393216;function next(){if(o>=b.size){B.done(t);return}var f=new FileReader();
+            f.onload=function(){var s=f.result;B.chunk(t,s.substring(s.indexOf(',')+1));o+=S;next()};
+            f.onerror=function(){B.fail(t,'read error')};f.readAsDataURL(b.slice(o,o+S))}next()})
+            .catch(function(e){B.fail(t,String(e))})})(${JSONObject.quote(url)},${JSONObject.quote(token)})"""
+        web.evaluateJavascript(js, null)
+    }
+
+    private inner class BlobBridge {
+        @JavascriptInterface
+        fun chunk(token: String, b64: String) {
+            val job = blobJobs[token] ?: return
+            runCatching { job.first.stream.write(Base64.decode(b64, Base64.DEFAULT)) }.onFailure { fail(token, it.message) }
+        }
+
+        @JavascriptInterface
+        fun done(token: String) {
+            val (target, name) = blobJobs.remove(token) ?: return
+            val ok = runCatching { target.commit() }.isSuccess
+            main.post { toast(if (ok) "Скачано: $name" else "Не удалось сохранить $name") }
+        }
+
+        @JavascriptInterface
+        fun fail(token: String, message: String?) {
+            val (target, name) = blobJobs.remove(token) ?: return
+            target.abort()
+            main.post { toast("Не удалось скачать $name: ${message ?: "ошибка"}") }
+        }
     }
 
     private fun downloadDirect(url: String, name: String, tab: Tab?) = withStoragePermission {
@@ -1012,22 +1444,14 @@ open class MainActivity : Activity() {
     }
 
     private fun withStoragePermission(action: () -> Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
-            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-        ) {
-            action()
-        } else {
-            pendingDownload = action
-            requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), REQ_STORAGE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { action(); return }
+        requestAppPermissions(listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) action() else toast("Нужно разрешение на запись файлов")
         }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        if (requestCode != REQ_STORAGE) return
-        val action = pendingDownload
-        pendingDownload = null
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) action?.invoke()
-        else toast("Нужно разрешение на запись файлов")
+        pendingPermissions.remove(requestCode)?.invoke()
     }
 
     // ------------------------------------------------------------------ context menu
@@ -1066,6 +1490,8 @@ open class MainActivity : Activity() {
             actions += "Открыть изображение в новой вкладке" to { newTab(image, parent = tab); Unit }
             actions += "Скачать изображение" to { downloadDirect(image, URLUtil.guessFileName(image, null, "image/*"), tab) }
             actions += "Копировать адрес изображения" to { copy(image) }
+        } else if (image != null && image.startsWith("data:image/")) {
+            actions += "Скачать изображение" to { downloadData(image, fileNameFor(image, null, null)) }
         }
         if (actions.isEmpty()) return
         val title = TextView(this).apply {
@@ -1108,6 +1534,8 @@ open class MainActivity : Activity() {
 
     private fun onPageScroll(tab: Tab, y: Int, oldY: Int) {
         if (tab !== current || !Prefs.autoHideBar) return
+        // Viewport resizes at the end of a bar transition can nudge scrollY; don't react to them.
+        if (SystemClock.uptimeMillis() < ignoreScrollUntil) { scrollAccum = 0; return }
         val dy = y - oldY
         scrollAccum = if (dy > 0 == scrollAccum > 0) scrollAccum + dy else dy
         when {
@@ -1123,35 +1551,86 @@ open class MainActivity : Activity() {
             !switcher.isShown && fullscreenView == null
     }
 
-    /** Slides the toolbar away on scroll, like Chrome's browser controls. */
+    /*
+     * Chrome-like browser controls. The toolbar keeps its place in the layout via a negative margin
+     * while hidden, and only translations are animated. The WebView is resized once — when hiding
+     * starts and when showing ends — at moments where the changed strip is off-screen or under the
+     * bar, so the page never jumps or flashes an empty strip.
+     */
+    private val barHeight get() = toolbar.height.takeIf { it > 0 } ?: dp(56)
+
+    /** Translation that makes a hidden-layout toolbar appear fully shown. */
+    private val shownShift get() = if (Prefs.bottomBar) -barHeight.toFloat() else barHeight.toFloat()
+
+    private val barsLaidOutHidden get() = (toolbar.layoutParams as LinearLayout.LayoutParams).let { it.topMargin != 0 || it.bottomMargin != 0 }
+
+    private fun layoutBars(hidden: Boolean) {
+        val lp = toolbar.layoutParams as LinearLayout.LayoutParams
+        val top = if (hidden && !Prefs.bottomBar) -barHeight else 0
+        val bottom = if (hidden && Prefs.bottomBar) -barHeight else 0
+        if (lp.topMargin == top && lp.bottomMargin == bottom) return
+        lp.topMargin = top
+        lp.bottomMargin = bottom
+        toolbar.layoutParams = lp
+    }
+
+    private fun setBarShift(s: Float) {
+        barShift = s
+        toolbar.translationY = s
+        progress.translationY = s
+        webContainer.translationY = if (Prefs.bottomBar) 0f else s
+    }
+
+    private fun animateBarShift(to: Float, onEnd: () -> Unit) {
+        barAnim?.cancel()
+        barAnim = ValueAnimator.ofFloat(barShift, to).apply {
+            duration = 200
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { setBarShift(it.animatedValue as Float) }
+            addListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+                override fun onAnimationCancel(animation: Animator) { cancelled = true }
+                override fun onAnimationEnd(animation: Animator) { if (!cancelled) onEnd() }
+            })
+            start()
+        }
+    }
+
+    private fun resetBars() {
+        barAnim?.cancel()
+        barAnim = null
+        setBarShift(0f)
+        layoutBars(hidden = false)
+    }
+
     private fun hideBars() {
         if (barsHidden || !canHideBars()) return
         barsHidden = true
-        val h = toolbar.height.toFloat()
-        val target: View = if (Prefs.bottomBar) toolbar else content
-        target.animate().cancel()
-        target.animate().translationY(if (Prefs.bottomBar) h else -h).setDuration(200).withEndAction {
-            if (barsHidden) {
-                toolbar.visibility = View.GONE
-                target.translationY = 0f
-                snackbar.bottomOffset = 0
-            }
-        }.start()
+        ignoreScrollUntil = SystemClock.uptimeMillis() + BAR_SETTLE_MS
+        if (!barsLaidOutHidden) {
+            layoutBars(hidden = true)
+            setBarShift(shownShift)
+        }
+        animateBarShift(0f) {
+            snackbar.bottomOffset = 0
+            ignoreScrollUntil = SystemClock.uptimeMillis() + BAR_SETTLE_MS
+        }
     }
 
     private fun showBars(animate: Boolean = true) {
         snackbar.bottomOffset = if (Prefs.bottomBar) dp(56) else 0
-        if (!barsHidden) return
+        if (!barsHidden) {
+            if (!animate) resetBars()
+            return
+        }
         barsHidden = false
         scrollAccum = 0
-        val target: View = if (Prefs.bottomBar) toolbar else content
-        target.animate().cancel()
-        val wasGone = toolbar.visibility == View.GONE
-        if (findBar.visibility != View.VISIBLE) toolbar.visibility = View.VISIBLE
-        if (!animate || !wasGone) { target.translationY = 0f; return }
-        val h = dp(56).toFloat()
-        target.translationY = if (Prefs.bottomBar) h else -h
-        target.animate().translationY(0f).setDuration(200).start()
+        ignoreScrollUntil = SystemClock.uptimeMillis() + BAR_SETTLE_MS
+        if (!animate || !barsLaidOutHidden) { resetBars(); return }
+        animateBarShift(shownShift) {
+            resetBars()
+            ignoreScrollUntil = SystemClock.uptimeMillis() + BAR_SETTLE_MS
+        }
     }
 
     // ------------------------------------------------------------------ tab swipe on toolbar
@@ -1304,11 +1783,14 @@ open class MainActivity : Activity() {
 
 
     companion object {
-        private const val REQ_STORAGE = 1
         private const val REQ_NOTIFY = 2
         private const val REQ_FILE = 3
         private const val REQ_LIBRARY = 4
         private const val REQ_SETTINGS = 5
         private const val REQ_VOICE = 6
+        private const val REQ_ONBOARDING = 7
+        private const val STATE_VERSION = 1
+        private const val BAR_SETTLE_MS = 300L
+        private const val BLOB_BRIDGE = "SvetloBlob"
     }
 }

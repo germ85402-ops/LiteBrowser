@@ -31,6 +31,7 @@ class NewTabPage(
 
     init {
         val logo = SpannableString("Svetlo")
+        // "Svet" = light: the brand's meaningful root gets the accent.
         logo.setSpan(ForegroundColorSpan(act.color(R.color.c_accent)), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         view.findViewById<TextView>(R.id.ntpLogo).text = logo
         view.findViewById<View>(R.id.ntpSearch).setOnClickListener { onSearch() }

@@ -55,6 +55,9 @@ object Prefs {
     var searchEngine: SearchEngine
         get() = runCatching { SearchEngine.valueOf(sp.getString("search_engine", null)!!) }.getOrDefault(SearchEngine.GOOGLE)
         set(v) = sp.edit().putString("search_engine", v.name).apply()
+    var onboarded: Boolean
+        get() = bool("onboarded", false)
+        set(v) = put("onboarded", v)
 
     private val HOST_LIKE = Regex("""^([a-z0-9-]+\.)+[a-z]{2,}(:\d+)?(/.*)?$|^localhost(:\d+)?(/.*)?$|^\d{1,3}(\.\d{1,3}){3}(:\d+)?(/.*)?$""", RegexOption.IGNORE_CASE)
 

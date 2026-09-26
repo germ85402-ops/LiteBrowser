@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="@color/ic_launcher_bg" android:pathData="M54,4A50,50 0,1 1,54,104A50,50 0,1 1,54,4z" />
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="1.08" android:scaleY="1.08">
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M54,39A15,15 0,1 1,54,69A15,15 0,1 1,54,39zM54,39A8.2,8.2 0,0 0,54,55.4A5.4,5.4 0,0 1,54,66.2L54,69A8.2,8.2 0,0 0,54,52.6A5.4,5.4 0,0 1,54,41.8z" />
+        <path
+            android:pathData="M54,32.5L54,24M69.2,38.8L73.09,34.91M75.5,54L84,54M69.2,69.2L73.09,73.09M54,75.5L54,84M38.8,69.2L34.91,73.09M32.5,54L24,54M38.8,38.8L34.91,34.91"
+            android:strokeWidth="5.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

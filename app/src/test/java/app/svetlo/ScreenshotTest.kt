@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.EditText
 import app.svetlo.data.BrowserDb
 import app.svetlo.ui.AdblockActivity
+import app.svetlo.ui.OnboardingActivity
 import app.svetlo.ui.SettingsActivity
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -146,6 +147,23 @@ class ScreenshotTest {
     fun settingsScreens() {
         shot("06_settings", Robolectric.buildActivity(SettingsActivity::class.java).setup().get().also { idle() })
         shot("07_adblock", Robolectric.buildActivity(AdblockActivity::class.java).setup().get().also { idle() })
+    }
+
+    @Test
+    fun onboarding() {
+        val act = Robolectric.buildActivity(OnboardingActivity::class.java).setup().get().also { idle() }
+        shot("13_onboarding", act)
+        fun find(v: View): android.widget.ScrollView? = v as? android.widget.ScrollView
+            ?: (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
+        find(act.window.decorView)!!.fullScroll(View.FOCUS_DOWN)
+        idle()
+        shot("13b_onboarding_bottom", act)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xxhdpi")
+    fun onboardingDark() {
+        shot("14_onboarding_dark", Robolectric.buildActivity(OnboardingActivity::class.java).setup().get().also { idle() })
     }
 
     @Test
