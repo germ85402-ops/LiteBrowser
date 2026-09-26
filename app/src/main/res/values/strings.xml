@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">LiteBrowser</string>
+    <string name="url_hint">Поиск или адрес</string>
+</resources>
