@@ -23,6 +23,10 @@ class Tab(var url: String, var title: String = "") {
     /** WebView history restored from disk, applied when the tab is first shown. */
     var savedState: Bundle? = null
     var error: PageError? = null
+    /** SourceBuffer MIME types the page created; non-empty means the page streams through MSE. */
+    val mseTypes: MutableSet<String> = java.util.Collections.synchronizedSet(LinkedHashSet())
+    /** Next page load should start MSE recording from its first segment. */
+    var mseArm = false
 
     @Volatile var pageHost: String? = null
     val blocked = AtomicInteger()

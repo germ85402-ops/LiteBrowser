@@ -37,7 +37,9 @@
     <TextView android:id="@+id/mDownloads" style="@style/MenuItem" android:drawableStart="@drawable/ic_download" android:text="@string/downloads" />
     <TextView android:id="@+id/mRecent" style="@style/MenuItem" android:drawableStart="@drawable/ic_devices" android:text="@string/recent_tabs" />
     <TextView android:id="@+id/mFind" style="@style/MenuItem" android:drawableStart="@drawable/ic_find" android:text="@string/find_hint" />
+    <TextView android:id="@+id/mReader" style="@style/MenuItem" android:drawableStart="@drawable/ic_reader" android:text="@string/reader_mode" />
     <TextView android:id="@+id/mShare" style="@style/MenuItem" android:drawableStart="@drawable/ic_share" android:text="@string/share" />
+    <TextView android:id="@+id/mPrint" style="@style/MenuItem" android:drawableStart="@drawable/ic_print" android:text="@string/print" />
     <TextView android:id="@+id/mTranslate" style="@style/MenuItem" android:drawableStart="@drawable/ic_translate" android:text="@string/translate" />
     <TextView android:id="@+id/mAddHome" style="@style/MenuItem" android:drawableStart="@drawable/ic_add_home" android:text="@string/add_home" />
 

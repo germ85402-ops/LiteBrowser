@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to publish, e.g. v0.2.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Check tag matches versionName
+        run: |
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match versionName $version in app/build.gradle.kts"; exit 1
+          fi
+
+      - name: Restore release key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SVETLO_KEYSTORE_BASE64 }}
+          SVETLO_STORE_PASSWORD: ${{ secrets.SVETLO_STORE_PASSWORD }}
+          SVETLO_KEY_ALIAS: ${{ secrets.SVETLO_KEY_ALIAS }}
+          SVETLO_KEY_PASSWORD: ${{ secrets.SVETLO_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$SVETLO_STORE_PASSWORD" ] || [ -z "$SVETLO_KEY_ALIAS" ] || [ -z "$SVETLO_KEY_PASSWORD" ]; then
+            echo "::error::Release signing secrets are missing. Run scripts/create-release-key.sh (see docs/RELEASE.md)."; exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "SVETLO_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Test and build
+        env:
+          SVETLO_STORE_PASSWORD: ${{ secrets.SVETLO_STORE_PASSWORD }}
+          SVETLO_KEY_ALIAS: ${{ secrets.SVETLO_KEY_ALIAS }}
+          SVETLO_KEY_PASSWORD: ${{ secrets.SVETLO_KEY_PASSWORD }}
+        run: ./gradlew testDebugUnitTest assembleRelease --console=plain
+
+      - name: Verify signature and package
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | tee certs.txt
+          if grep -q "CN=Android Debug" certs.txt; then echo "::error::APK is debug-signed"; exit 1; fi
+          mkdir dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/Svetlo-$TAG.apk"
+          (cd dist && sha256sum "Svetlo-$TAG.apk" > "Svetlo-$TAG.apk.sha256")
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease";; esac
+          notes=$(awk -v v="## ${TAG#v}" '$0==v{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md)
+          [ -n "$notes" ] || notes="Svetlo $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "Svetlo $TAG" --notes "$notes" $prerelease
+          fi

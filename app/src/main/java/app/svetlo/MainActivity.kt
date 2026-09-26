@@ -81,7 +81,9 @@ import app.svetlo.ui.TopCropImageView
 import app.svetlo.ui.LibraryActivity
 import app.svetlo.ui.MainMenu
 import app.svetlo.ui.NewTabPage
+import app.svetlo.ui.DownloadsActivity
 import app.svetlo.ui.OnboardingActivity
+import app.svetlo.ui.ReaderActivity
 import app.svetlo.ui.SettingsActivity
 import app.svetlo.ui.Suggestions
 import app.svetlo.ui.TabSwitcher
@@ -155,7 +157,9 @@ open class MainActivity : Activity() {
     private val sslAllowed = HashSet<String>()
     private val sslPending = HashMap<String, MutableList<SslErrorHandler>>()
     private var siteDialog: AlertDialog? = null
-    private val blobJobs = ConcurrentHashMap<String, Pair<OutputTarget, String>>()
+    private class BlobJob(val target: OutputTarget, val name: String, val entry: String) { var bytes = 0L }
+    private val blobJobs = ConcurrentHashMap<String, BlobJob>()
+    private val mse by lazy { MseRecorder(applicationContext) { main.post { refreshToolbar() } } }
 
     private lateinit var errorView: LinearLayout
     private lateinit var errorTitle: TextView
@@ -246,7 +250,7 @@ open class MainActivity : Activity() {
         btnClear.setOnClickListener { urlBar.text.clear() }
         shieldChip.setOnClickListener { showSiteInfo() }
         siteIcon.setOnClickListener { if (!urlBar.hasFocus()) showSiteInfo() }
-        mediaFab.setOnClickListener { showVideos() }
+        mediaFab.setOnClickListener { if (mse.recordingTab != null) stopMseRecording() else showVideos() }
         urlBar.setOnFocusChangeListener { _, focused ->
             omnibox.setBackgroundResource(if (focused) R.drawable.bg_omnibox_focused else R.drawable.bg_omnibox)
             listOf(R.id.btnHome, R.id.btnTabs, R.id.btnMenu).forEach {
@@ -324,10 +328,18 @@ open class MainActivity : Activity() {
         lastTabCount = tabs.size
         setProgress(tab)
         val videos = tab.media.count
-        mediaFab.visibility = if (videos > 0 && !tab.isNtp && !focused) View.VISIBLE else View.GONE
-        mediaFab.text = if (videos == 1) "Скачать видео" else "Видео · $videos"
+        val recording = mse.recordingTab
+        val streams = videos > 0 || tab.mseTypes.isNotEmpty()
+        mediaFab.visibility = if ((recording != null || streams && !tab.isNtp) && !focused) View.VISIBLE else View.GONE
+        mediaFab.text = when {
+            recording != null -> "● Запись · ${formatMb(mse.bytes)} · Стоп"
+            videos <= 1 -> "Скачать видео"
+            else -> "Видео · $videos"
+        }
         updateErrorView()
     }
+
+    private fun formatMb(bytes: Long) = String.format(Locale("ru"), "%.1f МБ", bytes / 1048576.0)
 
     private fun displayUrl(url: String): String {
         val u = Uri.parse(url)
@@ -625,9 +637,37 @@ open class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        current?.web?.onPause()
+        // In picture-in-picture the activity is paused but the video must keep playing.
+        if (!isInPip()) current?.web?.onPause()
         saveTabs()
         if (!incognito) AdBlock.saveStats()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        current?.web?.onPause()
+    }
+
+    private fun isInPip() = Build.VERSION.SDK_INT >= 24 && isInPictureInPictureMode
+
+    private fun canPip() = Build.VERSION.SDK_INT >= 26 && Prefs.pictureInPicture && fullscreenView != null &&
+        packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+
+    @SuppressLint("NewApi")
+    private fun pipParams(): android.app.PictureInPictureParams {
+        val b = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9))
+        if (Build.VERSION.SDK_INT >= 31) b.setAutoEnterEnabled(canPip()).setSeamlessResizeEnabled(true)
+        return b.build()
+    }
+
+    /** Chrome-like: leaving the app while a video is fullscreen continues it in a floating window. */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT in 26..30 && canPip()) runCatching { enterPictureInPictureMode(pipParams()) }
+    }
+
+    private fun updatePipParams() {
+        if (Build.VERSION.SDK_INT >= 31) runCatching { setPictureInPictureParams(pipParams()) }
     }
 
     override fun onResume() {
@@ -649,6 +689,7 @@ open class MainActivity : Activity() {
     private fun ensureWeb(tab: Tab): WebView = tab.web ?: createWeb(tab)
 
     private fun destroyWeb(tab: Tab) {
+        if (mse.recordingTab === tab) stopMseRecording()
         tab.web?.let {
             webContainer.removeView(it)
             it.stopLoading()
@@ -659,6 +700,7 @@ open class MainActivity : Activity() {
         tab.progress = 100
         tab.error = null
         tab.media.clear()
+        tab.mseTypes.clear()
         tab.blocked.set(0)
     }
 
@@ -680,6 +722,7 @@ open class MainActivity : Activity() {
         web.webViewClient = TabClient(tab)
         web.webChromeClient = TabChrome(tab)
         web.addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
+        web.addJavascriptInterface(mse.Bridge(tab), MseRecorder.BRIDGE)
         web.setDownloadListener { url, _, disposition, mime, _ ->
             val name = fileNameFor(url, disposition, mime)
             AlertDialog.Builder(this).setTitle("Скачать файл?").setMessage(name)
@@ -781,6 +824,10 @@ open class MainActivity : Activity() {
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             injectedFor = null
+            tab.mseTypes.clear()
+            view.evaluateJavascript(MseRecorder.hook(tab.mseArm), null)
+            // Scriptlets must run before page scripts to be effective; pageScript repeats them if this was too early.
+            AdBlock.earlyScript(Uri.parse(url).host?.lowercase())?.let { view.evaluateJavascript(it, null) }
             if (tab.error?.url != url) tab.error = null
             if (tab === current) showBars()
             tab.url = url
@@ -789,7 +836,12 @@ open class MainActivity : Activity() {
             if (tab === current) refreshToolbar()
         }
 
-        override fun onPageCommitVisible(view: WebView, url: String) = inject(view, url)
+        override fun onPageCommitVisible(view: WebView, url: String) {
+            // onPageStarted may still run in the previous document; repeat once the new one is live.
+            view.evaluateJavascript(MseRecorder.hook(tab.mseArm), null)
+            tab.mseArm = false
+            inject(view, url)
+        }
 
         override fun onPageFinished(view: WebView, url: String) {
             inject(view, url)
@@ -910,6 +962,7 @@ open class MainActivity : Activity() {
                 it.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
             }
+            updatePipParams()
         }
 
         override fun onHideCustomView() = exitFullscreen()
@@ -950,6 +1003,7 @@ open class MainActivity : Activity() {
         fullscreenCallback?.onCustomViewHidden()
         fullscreenView = null
         fullscreenCallback = null
+        updatePipParams()
     }
 
     private fun openExternal(view: WebView, uri: Uri) {
@@ -1162,6 +1216,29 @@ open class MainActivity : Activity() {
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, tab.url), null))
     }
 
+    internal fun openReader() {
+        val tab = current?.takeIf { !it.isNtp } ?: return
+        val web = tab.web ?: return
+        web.evaluateJavascript(Reader.EXTRACT_JS) { result ->
+            val json = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
+            val article = Reader.parse(tab.url, json)
+            if (article == null) { toast("На этой странице не найден текст статьи"); return@evaluateJavascript }
+            ReaderActivity.pending = article
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(this, ReaderActivity::class.java), REQ_READER)
+        }
+    }
+
+    internal fun printPage() {
+        val tab = current?.takeIf { !it.isNtp } ?: return
+        val web = tab.web ?: return
+        val name = tab.displayTitle().replace(Regex("""[\\/:*?"<>|]"""), "_").take(80)
+        runCatching {
+            getSystemService(android.print.PrintManager::class.java)
+                .print(name, web.createPrintDocumentAdapter(name), android.print.PrintAttributes.Builder().build())
+        }.onFailure { toast("Печать недоступна") }
+    }
+
     internal fun openLibrary(bookmarks: Boolean) {
         @Suppress("DEPRECATION")
         startActivityForResult(Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_BOOKMARKS, bookmarks), REQ_LIBRARY)
@@ -1178,11 +1255,7 @@ open class MainActivity : Activity() {
     }
 
     internal fun openDownloads() {
-        try {
-            startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
-        } catch (_: Exception) {
-            toast("Файлы сохраняются в Download/Svetlo")
-        }
+        startActivity(Intent(this, DownloadsActivity::class.java))
     }
 
     @Deprecated("Deprecated in Java")
@@ -1201,6 +1274,10 @@ open class MainActivity : Activity() {
             REQ_LIBRARY -> {
                 val url = data?.getStringExtra(LibraryActivity.EXTRA_URL) ?: return
                 if (data.getBooleanExtra(LibraryActivity.EXTRA_NEW_TAB, false)) newTab(url) else navigate(url)
+            }
+            REQ_READER -> {
+                val url = data?.getStringExtra(ReaderActivity.EXTRA_URL) ?: return
+                navigate(url)
             }
             REQ_SETTINGS, REQ_ONBOARDING -> {
                 applyToolbarPosition()
@@ -1288,36 +1365,71 @@ open class MainActivity : Activity() {
         tab.media.pageTitle = tab.title.takeIf { it.isNotBlank() }
         scanMedia(tab) {
             val items = tab.media.list()
-            if (items.isEmpty()) {
+            val canRecord = tab.mseTypes.isNotEmpty()
+            if (items.isEmpty() && !canRecord) {
                 toast("Видео не найдено. Запустите воспроизведение и попробуйте снова.")
                 return@scanMedia
             }
-            val labels = items.map { if (it.isSupported) it.label else it.label + "\nDASH-поток не поддерживается" }
+            val labels = items.map { it.label }.toMutableList()
+            if (canRecord) labels += "● Записать видео из плеера\nДля YouTube и сайтов без прямой ссылки на файл"
             AlertDialog.Builder(this)
                 .setTitle("Видео на странице")
                 .setItems(labels.toTypedArray()) { _, i ->
-                    val item = items[i]
-                    when {
-                        !item.isSupported -> toast("Этот формат (DASH) пока нельзя скачать")
-                        item.isHls -> chooseHlsQuality(tab, item)
-                        else -> startMediaDownload(tab, item, null)
-                    }
+                    val item = items.getOrNull(i) ?: return@setItems confirmMseRecording(tab)
+                    if (item.kind == MediaKind.DIRECT) startMediaDownload(tab, item, null) else chooseStreamQuality(tab, item)
                 }
                 .setNegativeButton("Закрыть", null)
                 .show()
         }
     }
 
+    private fun confirmMseRecording(tab: Tab) {
+        AlertDialog.Builder(this)
+            .setTitle("Запись видео из плеера")
+            .setMessage(
+                "Страница перезагрузится, и Svetlo начнёт сохранять то, что загружает плеер.\n\n" +
+                    "• Выберите нужное качество и досмотрите видео до конца (можно ускорить воспроизведение).\n" +
+                    "• Перемотка вперёд пропускает часть видео.\n" +
+                    "• Видео и звук обычно сохраняются двумя файлами.\n\n" +
+                    "Нажмите «Стоп» на кнопке записи, когда закончите.",
+            )
+            .setPositiveButton("Начать") { _, _ -> startMseRecording(tab) }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun startMseRecording(tab: Tab) = withStoragePermission {
+        val web = tab.web ?: return@withStoragePermission
+        mse.start(tab, tab.title.takeIf { it.isNotBlank() })
+        tab.mseArm = true
+        web.reload()
+        refreshToolbar()
+    }
+
+    private fun stopMseRecording() {
+        val tab = mse.recordingTab
+        tab?.web?.evaluateJavascript("window.__svMseRec&&window.__svMseRec(false)", null)
+        tab?.mseArm = false
+        val files = mse.stop()
+        toast(if (files.isEmpty()) "Запись пуста: видео не воспроизводилось" else "Сохранено: " + files.joinToString(", "))
+        refreshToolbar()
+    }
+
     /** Loads the stream's quality list off the main thread, then lets the user pick one. */
-    private fun chooseHlsQuality(tab: Tab, item: MediaItem) {
+    private fun chooseStreamQuality(tab: Tab, item: MediaItem) {
         val headers = requestHeaders(item.url, tab)
         toast("Получаю список качеств…")
         Thread {
-            val variants = runCatching { HlsDownloader(headers) { false }.variants(item.url) }.getOrDefault(emptyList())
+            val result = runCatching { StreamDownloader.variants(item.url, headers, item.kind) }
+            val variants = result.getOrDefault(emptyList())
             main.post {
                 if (isFinishing || isDestroyed) return@post
+                // DRM and live streams can't be saved; say so instead of starting a job that fails.
+                result.exceptionOrNull()?.let { e ->
+                    if (item.kind == MediaKind.DASH) { toast(HlsDownloadService.describe(e)); return@post }
+                }
                 if (variants.size <= 1) { startMediaDownload(tab, item, variants.firstOrNull()); return@post }
-                val auto = HlsDownloader.pickDefault(variants)
+                val auto = StreamDownloader.pickDefault(variants)
                 val labels = listOf("Авто" + (auto?.let { " (${it.label})" } ?: "")) + variants.map { it.label }
                 AlertDialog.Builder(this)
                     .setTitle("Качество видео")
@@ -1329,7 +1441,7 @@ open class MainActivity : Activity() {
     }
 
     private fun startMediaDownload(tab: Tab, item: MediaItem, variant: HlsDownloader.Variant?) {
-        if (item.isHls) {
+        if (item.kind != MediaKind.DIRECT) {
             withStoragePermission {
                 if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                     requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY)
@@ -1337,7 +1449,7 @@ open class MainActivity : Activity() {
                 HlsDownloadService.start(
                     this, item.url, requestHeaders(item.url, tab),
                     title = item.title ?: tab.title.takeIf { it.isNotBlank() },
-                    variantUrl = variant?.url, audioUrl = variant?.audioUrl,
+                    variantUrl = variant?.url, audioUrl = variant?.audioUrl, kind = item.kind,
                 )
                 toast(if (variant?.audioUrl != null) "Загрузка началась. Звук сохранится отдельным файлом" else "Загрузка началась")
             }
@@ -1384,7 +1496,13 @@ open class MainActivity : Activity() {
                 val payload = url.substringAfter(',')
                 val bytes = if (meta.endsWith(";base64")) Base64.decode(payload, Base64.DEFAULT) else Uri.decode(payload).toByteArray()
                 val target = OutputTarget(this, name, mime)
-                try { target.stream.write(bytes); target.commit() } catch (e: Exception) { target.abort(); throw e }
+                val entry = Downloads.recordLocal(name, url.take(200), mime)
+                try {
+                    target.stream.write(bytes); target.commit()
+                    Downloads.finishLocal(entry, target.contentUri, true, null, bytes.size.toLong())
+                } catch (e: Exception) {
+                    target.abort(); Downloads.finishLocal(entry, null, false, e.message); throw e
+                }
             }
             main.post { toast(if (result.isSuccess) "Скачано: $name" else "Не удалось скачать: ${result.exceptionOrNull()?.message}") }
         }.start()
@@ -1397,7 +1515,7 @@ open class MainActivity : Activity() {
             toast("Не удалось создать файл: ${it.message}"); return@withStoragePermission
         }
         val token = UUID.randomUUID().toString()
-        blobJobs[token] = target to name
+        blobJobs[token] = BlobJob(target, name, Downloads.recordLocal(name, tab.url, target.mime))
         toast("Скачивание: $name")
         val js = """(function(u,t){var B=window.$BLOB_BRIDGE;fetch(u).then(function(r){return r.blob()}).then(function(b){
             var o=0,S=393216;function next(){if(o>=b.size){B.done(t);return}var f=new FileReader();
@@ -1411,20 +1529,25 @@ open class MainActivity : Activity() {
         @JavascriptInterface
         fun chunk(token: String, b64: String) {
             val job = blobJobs[token] ?: return
-            runCatching { job.first.stream.write(Base64.decode(b64, Base64.DEFAULT)) }.onFailure { fail(token, it.message) }
+            runCatching { Base64.decode(b64, Base64.DEFAULT).also { job.target.stream.write(it) }.size }
+                .onSuccess { job.bytes += it }.onFailure { fail(token, it.message) }
         }
 
         @JavascriptInterface
         fun done(token: String) {
-            val (target, name) = blobJobs.remove(token) ?: return
-            val ok = runCatching { target.commit() }.isSuccess
+            val job = blobJobs.remove(token) ?: return
+            val ok = runCatching { job.target.commit() }.isSuccess
+            val name = job.name
+            Downloads.finishLocal(job.entry, job.target.contentUri, ok, if (ok) null else "Не удалось сохранить", job.bytes)
             main.post { toast(if (ok) "Скачано: $name" else "Не удалось сохранить $name") }
         }
 
         @JavascriptInterface
         fun fail(token: String, message: String?) {
-            val (target, name) = blobJobs.remove(token) ?: return
-            target.abort()
+            val job = blobJobs.remove(token) ?: return
+            job.target.abort()
+            val name = job.name
+            Downloads.finishLocal(job.entry, null, false, message)
             main.post { toast("Не удалось скачать $name: ${message ?: "ошибка"}") }
         }
     }
@@ -1436,7 +1559,8 @@ open class MainActivity : Activity() {
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Svetlo/$name")
             requestHeaders(url, tab).forEach { (k, v) -> req.addRequestHeader(k, v) }
-            getSystemService(DownloadManager::class.java).enqueue(req)
+            val id = getSystemService(DownloadManager::class.java).enqueue(req)
+            Downloads.recordSystem(this, id, name, url, mimeFor(name, null))
             toast("Скачивание: $name")
         } catch (e: Exception) {
             toast("Ошибка: ${e.message}")
@@ -1789,6 +1913,7 @@ open class MainActivity : Activity() {
         private const val REQ_SETTINGS = 5
         private const val REQ_VOICE = 6
         private const val REQ_ONBOARDING = 7
+        private const val REQ_READER = 8
         private const val STATE_VERSION = 1
         private const val BAR_SETTLE_MS = 300L
         private const val BLOB_BRIDGE = "SvetloBlob"

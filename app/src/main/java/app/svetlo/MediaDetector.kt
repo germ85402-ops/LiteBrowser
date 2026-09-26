@@ -7,8 +7,8 @@ enum class MediaKind { DIRECT, HLS, DASH }
 data class MediaItem(val url: String, val kind: MediaKind, val title: String? = null) {
     val isHls: Boolean get() = kind == MediaKind.HLS
 
-    /** DASH manifests are listed for information only: they can't be saved without muxing. */
-    val isSupported: Boolean get() = kind != MediaKind.DASH
+    /** Every detected kind can be downloaded (DASH via [DashDownloader], audio saved separately). */
+    val isSupported: Boolean get() = true
 
     val fileName: String get() = MediaDetector.fileName(url)
     val host: String get() = MediaDetector.split(url)?.host.orEmpty()
@@ -22,7 +22,7 @@ data class MediaItem(val url: String, val kind: MediaKind, val title: String? = 
             val tag = when (kind) {
                 MediaKind.DIRECT -> "Файл"
                 MediaKind.HLS -> "Поток HLS"
-                MediaKind.DASH -> "DASH — не поддерживается"
+                MediaKind.DASH -> "Поток DASH"
             }
             return "$name\n$tag · $host"
         }

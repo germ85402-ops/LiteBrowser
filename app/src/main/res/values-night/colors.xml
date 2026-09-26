@@ -12,6 +12,7 @@
     <color name="c_on_accent">#0D1530</color>
     <color name="c_divider">#323741</color>
     <color name="c_warn">#F0A85A</color>
+    <color name="c_error">#F28B82</color>
     <color name="c_snack">#E8EAEF</color>
     <color name="c_snack_text">#1A1C21</color>
     <color name="c_snack_action">#3A67F0</color>

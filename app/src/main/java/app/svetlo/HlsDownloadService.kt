@@ -27,8 +27,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Foreground service for HLS downloads. Jobs run up to [PARALLEL_JOBS] at a time; each has its own
+ * Foreground service for HLS/DASH downloads. Jobs run up to [PARALLEL_JOBS] at a time; each has its own
  * notification and cancel action, while a group-summary notification keeps the service in foreground.
+ * Every job is mirrored in [DownloadRegistry] as "svc-<jobId>".
  */
 class HlsDownloadService : Service() {
     private class Job(
@@ -38,9 +39,11 @@ class HlsDownloadService : Service() {
         val title: String?,
         val variantUrl: String?,
         val audioUrl: String?,
+        val kind: MediaKind,
     ) {
         @Volatile var cancelled = false
         val noteId get() = 1000 + id
+        val entryId get() = "svc-$id"
     }
 
     private val executor = Executors.newFixedThreadPool(PARALLEL_JOBS)
@@ -52,6 +55,7 @@ class HlsDownloadService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        DownloadRegistry.init(this)
         nm = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Загрузки", NotificationManager.IMPORTANCE_LOW))
@@ -82,8 +86,15 @@ class HlsDownloadService : Service() {
         val job = Job(
             nextId.incrementAndGet(), url, headers, intent.getStringExtra(EXTRA_TITLE),
             intent.getStringExtra(EXTRA_VARIANT), intent.getStringExtra(EXTRA_AUDIO),
+            if (intent.getStringExtra(EXTRA_KIND) == MediaKind.DASH.name) MediaKind.DASH else MediaKind.HLS,
         )
         jobs[job.id] = job
+        DownloadRegistry.put(
+            DownloadEntry(
+                id = job.entryId, name = fileBase(job.title), source = url, status = DownloadStatus.QUEUED,
+                createdAt = System.currentTimeMillis(), jobId = job.id,
+            ),
+        )
         nm.notify(job.noteId, progressNote(job, job.title ?: "Видео", "В очереди…", 0))
         goForeground()
         executor.execute { runJob(job) }
@@ -115,19 +126,31 @@ class HlsDownloadService : Service() {
         try {
             if (job.cancelled) throw InterruptedException("cancelled")
             val dl = HlsDownloader(job.headers) { job.cancelled }
-            val sel = dl.select(job.url, job.variantUrl, job.audioUrl)
+            val videoPl: HlsDownloader.Playlist
+            val audioPl: (() -> HlsDownloader.Playlist)?
+            if (job.kind == MediaKind.DASH) {
+                val sel = DashDownloader(dl).select(job.url, job.variantUrl, job.audioUrl)
+                videoPl = sel.video
+                audioPl = sel.audio?.let { a -> { a } }
+            } else {
+                val sel = dl.select(job.url, job.variantUrl, job.audioUrl)
+                videoPl = sel.video
+                audioPl = sel.audioUrl?.let { au -> { dl.resolve(au) } }
+            }
             val base = fileBase(job.title)
-            video = OutputTarget(this, "$base.${sel.video.extension()}", sel.video.mime())
-            val name = video.displayName
+            val out = OutputTarget(this, "$base.${videoPl.extension()}", videoPl.mime())
+            video = out
+            val name = out.displayName
+            DownloadRegistry.update(job.entryId) { it.copy(name = name, mime = out.mime, status = DownloadStatus.RUNNING) }
             val vp = Progress(job, name, "")
-            dl.download(sel.video, video.stream, vp::update)
+            dl.download(videoPl, video.stream, vp::update)
             video.commit()
             videoSaved = true
 
             var audioName: String? = null
-            val audioError = sel.audioUrl?.let { au ->
+            val audioError = audioPl?.let { load ->
                 runCatching {
-                    val ap = dl.resolve(au)
+                    val ap = load()
                     audio = OutputTarget(this, "$base (аудио).${ap.extension(audio = true)}", ap.mime(audio = true)).also { t ->
                         dl.download(ap, t.stream, Progress(job, name, "Звук: ")::update)
                         t.commit()
@@ -145,12 +168,22 @@ class HlsDownloadService : Service() {
                 audioError != null -> "Видео сохранено без звука: звуковую дорожку скачать не удалось (${describe(audioError)})."
                 else -> "Сохранено в Download/Svetlo"
             }
+            val audioUri = audio?.takeIf { audioName != null }?.contentUri?.toString()
+            DownloadRegistry.update(job.entryId) {
+                it.copy(
+                    status = DownloadStatus.DONE, name = name, mime = out.mime, contentUri = out.contentUri?.toString(),
+                    extraUris = listOfNotNull(audioUri), message = text, percent = 100, speed = 0.0,
+                )
+            }
             finish(job, name, text, true, video.contentUri, video.mime, toast = "Скачано: $name")
         } catch (e: Throwable) {
             if (!videoSaved) video?.abort()
             audio?.abort()
             val cancelled = job.cancelled || e is InterruptedException
             val msg = if (cancelled) "Загрузка отменена" else "Ошибка: ${describe(e)}"
+            DownloadRegistry.update(job.entryId) {
+                it.copy(status = if (cancelled) DownloadStatus.CANCELLED else DownloadStatus.FAILED, message = msg, speed = 0.0)
+            }
             finish(job, job.title ?: "Видео", msg, false, null, null, toast = msg)
         } finally {
             jobs.remove(job.id)
@@ -183,6 +216,13 @@ class HlsDownloadService : Service() {
             if (now - lastNote < 700 && done != total) return
             lastNote = now
             val pct = if (total > 0) done * 100 / total else 0
+            val s = speed
+            DownloadRegistry.update(job.entryId) {
+                it.copy(
+                    status = DownloadStatus.RUNNING, bytes = bytes, percent = pct, speed = s,
+                    message = if (prefix.isEmpty()) null else "Загрузка звука",
+                )
+            }
             nm.notify(job.noteId, progressNote(job, name, prefix + formatProgress(bytes, pct, speed), pct))
         }
     }
@@ -248,6 +288,7 @@ class HlsDownloadService : Service() {
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_VARIANT = "variant"
         private const val EXTRA_AUDIO = "audio"
+        private const val EXTRA_KIND = "kind"
         private const val EXTRA_JOB = "job"
         private const val ACTION_CANCEL = "app.svetlo.CANCEL_DOWNLOAD"
 
@@ -255,8 +296,8 @@ class HlsDownloadService : Service() {
         private val nextId = AtomicInteger(((System.currentTimeMillis() / 1000) % 100_000).toInt() * 10)
 
         /**
-         * Queues an HLS download. [url] is the playlist as detected (master or media); [variantUrl]/[audioUrl]
-         * come from [HlsDownloader.variants] when the user picked a quality, otherwise the best one is chosen.
+         * Queues an HLS or DASH ([kind]) download. [url] is the playlist/MPD as detected; [variantUrl]/[audioUrl]
+         * come from [StreamDownloader.variants] when the user picked a quality, otherwise the best one is chosen.
          * [title] becomes the file name (sanitised), falling back to video_yyyyMMdd_HHmmss.
          */
         fun start(
@@ -266,6 +307,7 @@ class HlsDownloadService : Service() {
             title: String? = null,
             variantUrl: String? = null,
             audioUrl: String? = null,
+            kind: MediaKind = MediaKind.HLS,
         ) {
             val i = Intent(ctx, HlsDownloadService::class.java)
                 .putExtra(EXTRA_URL, url)
@@ -273,8 +315,14 @@ class HlsDownloadService : Service() {
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_VARIANT, variantUrl)
                 .putExtra(EXTRA_AUDIO, audioUrl)
+                .putExtra(EXTRA_KIND, kind.name)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i) else ctx.startService(i)
         }
+
+        /** Cancels a running/queued job (see [DownloadEntry.jobId]). Returns false if the service couldn't be reached. */
+        fun cancel(ctx: Context, jobId: Int): Boolean = runCatching {
+            ctx.startService(Intent(ctx, HlsDownloadService::class.java).setAction(ACTION_CANCEL).putExtra(EXTRA_JOB, jobId))
+        }.isSuccess
 
         internal fun fileBase(title: String?, now: Date = Date()): String {
             val clean = title.orEmpty()

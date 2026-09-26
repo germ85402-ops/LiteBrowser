@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.EditText
 import app.svetlo.data.BrowserDb
 import app.svetlo.ui.AdblockActivity
+import app.svetlo.ui.DownloadsActivity
 import app.svetlo.ui.OnboardingActivity
 import app.svetlo.ui.SettingsActivity
 import org.junit.Assume.assumeTrue
@@ -147,6 +148,47 @@ class ScreenshotTest {
     fun settingsScreens() {
         shot("06_settings", Robolectric.buildActivity(SettingsActivity::class.java).setup().get().also { idle() })
         shot("07_adblock", Robolectric.buildActivity(AdblockActivity::class.java).setup().get().also { idle() })
+    }
+
+    private fun seedDownloads() {
+        DownloadRegistry.init(org.robolectric.RuntimeEnvironment.getApplication())
+        DownloadRegistry.list().forEach { DownloadRegistry.remove(it.id) }
+        val now = System.currentTimeMillis()
+        val mb = 1048576L
+        listOf(
+            DownloadEntry("svc-1", "Как устроен Android — лекция 3.mp4", "https://cdn.example.com/lecture3.m3u8", DownloadStatus.RUNNING,
+                now, mime = "video/mp4", bytes = (12.3 * mb).toLong(), total = 27 * mb, speed = 1.2 * mb, jobId = 1),
+            DownloadEntry("app-2", "Отпуск_2026_финал.mp4", "https://example.com/v.mp4", DownloadStatus.DONE,
+                now - 3_600_000, mime = "video/mp4", bytes = 27 * mb, total = 27 * mb, contentUri = "content://media/1"),
+            DownloadEntry("app-3", "report-q3.pdf", "https://example.com/report-q3.pdf", DownloadStatus.FAILED,
+                now - 7_200_000, mime = "application/pdf", message = "обрыв соединения"),
+            DownloadEntry("app-4", "IMG_20260925_142000.jpg", "https://example.com/p.jpg", DownloadStatus.DONE,
+                now - 86_400_000, mime = "image/jpeg", bytes = (2.4 * mb).toLong(), total = (2.4 * mb).toLong(), contentUri = "content://media/2"),
+            DownloadEntry("app-5", "podcast-episode-42.mp3", "https://example.com/42.mp3", DownloadStatus.CANCELLED,
+                now - 3 * 86_400_000L, mime = "audio/mpeg"),
+        ).forEach { DownloadRegistry.put(it) }
+    }
+
+    @Test
+    fun downloads() {
+        seedDownloads()
+        shot("15_downloads", Robolectric.buildActivity(DownloadsActivity::class.java).setup().get().also { idle() })
+        DownloadRegistry.list().forEach { DownloadRegistry.remove(it.id) }
+        shot("15b_downloads_empty", Robolectric.buildActivity(DownloadsActivity::class.java).setup().get().also { idle() })
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xxhdpi")
+    fun downloadsDark() {
+        seedDownloads()
+        shot("16_downloads_dark", Robolectric.buildActivity(DownloadsActivity::class.java).setup().get().also { idle() })
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi", fontScale = 1.5f)
+    fun downloadsLargeFont() {
+        seedDownloads()
+        shot("17_downloads_large_font", Robolectric.buildActivity(DownloadsActivity::class.java).setup().get().also { idle() })
     }
 
     @Test

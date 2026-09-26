@@ -8,6 +8,8 @@
     <string name="bookmarks">Закладки</string>
     <string name="downloads">Загрузки</string>
     <string name="share">Поделиться</string>
+    <string name="reader_mode">Режим чтения</string>
+    <string name="print">Печать и PDF</string>
     <string name="desktop_site">Версия для ПК</string>
     <string name="adblock">Блокировка рекламы</string>
     <string name="settings">Настройки</string>
@@ -30,4 +32,5 @@
     <string name="recent_tabs">Недавние вкладки</string>
     <string name="translate">Перевести</string>
     <string name="add_home">Добавить на главный экран</string>
+    <string name="downloads_empty">Здесь появятся скачанные файлы</string>
 </resources>
