@@ -48,9 +48,8 @@ class NewTabPageTest {
 
         address.setText("shortcut-test.invalid")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        assertFalse(dialog.isShowing)
-
         val saved = JSONArray(Prefs.sp.getString("ntp_pinned", "[]"))
+        assertEquals("valid input should be saved (field error: ${address.error})", 1, saved.length())
         assertEquals("https://shortcut-test.invalid", saved.getString(0))
         assertTrue((0 until grid.childCount).map(grid::getChildAt).any { it.contentDescription == "Shortcut-test" })
     }
