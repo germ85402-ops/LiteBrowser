@@ -38,7 +38,7 @@ class NewTabPageTest {
         add.performClick()
 
         val dialog = ShadowDialog.getLatestDialog() as AlertDialog
-        val address = findEditText(dialog.window!!.decorView)
+        val address = findEditText(dialog.window!!.decorView, "example.com")
             ?: error("the add-site form should expose an address field")
 
         address.setText("cats and videos")
@@ -54,11 +54,11 @@ class NewTabPageTest {
         assertTrue((0 until grid.childCount).map(grid::getChildAt).any { it.contentDescription == "Shortcut-test" })
     }
 
-    private fun findEditText(view: View): EditText? {
-        if (view is EditText) return view
+    private fun findEditText(view: View, hint: String): EditText? {
+        if (view is EditText && view.hint?.toString() == hint) return view
         if (view !is ViewGroup) return null
         for (index in 0 until view.childCount) {
-            findEditText(view.getChildAt(index))?.let { return it }
+            findEditText(view.getChildAt(index), hint)?.let { return it }
         }
         return null
     }
