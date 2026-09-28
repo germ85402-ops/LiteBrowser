@@ -185,31 +185,29 @@ class NewTabPage(
             .setNegativeButton("Отмена", null)
             .setPositiveButton("Добавить", null)
             .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val text = input.text.toString().trim()
-                if (!Prefs.looksLikeUrl(text)) {
-                    input.error = "Введите адрес сайта, например example.com"
-                    return@setOnClickListener
-                }
-                val url = Prefs.toUrl(text)
-                val uri = Uri.parse(url)
-                val host = uri.host?.let(::hostOf)
-                if (uri.scheme !in WEB_SCHEMES || host.isNullOrBlank()) {
-                    input.error = "Введите полный адрес сайта"
-                    return@setOnClickListener
-                }
-                if (pinned().any { hostOf(it) == host } || host in currentHosts()) {
-                    input.error = "Этот сайт уже есть на стартовой странице"
-                    return@setOnClickListener
-                }
-                savePinned(pinned() + url)
-                Prefs.sp.edit().putStringSet("ntp_hidden", hidden() - host).apply()
-                dialog.dismiss()
-                refresh()
-            }
-        }
         dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val text = input.text.toString().trim()
+            if (!Prefs.looksLikeUrl(text)) {
+                input.error = "Введите адрес сайта, например example.com"
+                return@setOnClickListener
+            }
+            val url = Prefs.toUrl(text)
+            val uri = Uri.parse(url)
+            val host = uri.host?.let(::hostOf)
+            if (uri.scheme !in WEB_SCHEMES || host.isNullOrBlank()) {
+                input.error = "Введите полный адрес сайта"
+                return@setOnClickListener
+            }
+            if (pinned().any { hostOf(it) == host } || host in currentHosts()) {
+                input.error = "Этот сайт уже есть на стартовой странице"
+                return@setOnClickListener
+            }
+            savePinned(pinned() + url)
+            Prefs.sp.edit().putStringSet("ntp_hidden", hidden() - host).apply()
+            dialog.dismiss()
+            refresh()
+        }
     }
 
     private fun currentHosts(): Set<String> {
