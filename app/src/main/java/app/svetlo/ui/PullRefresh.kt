@@ -17,7 +17,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /** Chrome-like overscroll refresh indicator driven by the page's touch stream. */
-class PullRefresh(ctx: Context, container: FrameLayout, private val onRefresh: () -> Unit) {
+class PullRefresh(private val ctx: Context, container: FrameLayout, private val onRefresh: () -> Unit) {
     private val size = ctx.dp(40)
     private val trigger = ctx.dp(84).toFloat()
     private val maxPull = ctx.dp(140).toFloat()

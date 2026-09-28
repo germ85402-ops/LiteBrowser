@@ -76,7 +76,7 @@ class MediaSheet(
                 setTextColor(activity.color(R.color.c_text2))
                 setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
                 setBackgroundResource(R.drawable.bg_card)
-                lineSpacingExtra = activity.dp(3).toFloat()
+                setLineSpacing(activity.dp(3).toFloat(), 1f)
             })
         } else {
             items.asReversed().forEachIndexed { index, item ->
@@ -93,7 +93,7 @@ class MediaSheet(
         val scroll = ScrollView(activity).apply {
             isFillViewport = true
             clipToPadding = false
-            addView(list, ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(list, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
