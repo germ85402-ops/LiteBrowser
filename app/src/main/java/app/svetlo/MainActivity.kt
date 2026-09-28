@@ -1737,7 +1737,7 @@ open class MainActivity : Activity() {
             return
         }
         barAnim = ValueAnimator.ofFloat(barShift, to).apply {
-            duration = duration
+            this.duration = duration
             interpolator = DecelerateInterpolator()
             addUpdateListener { setBarShift(it.animatedValue as Float) }
             addListener(object : AnimatorListenerAdapter() {
