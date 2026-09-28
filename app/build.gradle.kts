@@ -11,8 +11,8 @@ android {
         applicationId = "app.svetlo.browser"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0-rc1"
     }
 
     // Release key comes from the environment (CI secrets or a local shell); see docs/RELEASE.md.
