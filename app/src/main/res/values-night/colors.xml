@@ -1,19 +1,19 @@
 <resources>
-    <color name="c_bg">#15171C</color>
-    <color name="c_toolbar">#1D2026</color>
-    <color name="c_omnibox">#2B2F38</color>
-    <color name="c_card">#23262E</color>
-    <color name="c_surface2">#2A2E37</color>
-    <color name="c_text">#E8EAEF</color>
-    <color name="c_text2">#A3A9B5</color>
-    <color name="c_icon">#C7CBD4</color>
-    <color name="c_accent">#8EABFF</color>
-    <color name="c_accent_soft">#2C395C</color>
-    <color name="c_on_accent">#0D1530</color>
-    <color name="c_divider">#323741</color>
-    <color name="c_warn">#F0A85A</color>
+    <color name="c_bg">#202124</color>
+    <color name="c_toolbar">#202124</color>
+    <color name="c_omnibox">#3C4043</color>
+    <color name="c_card">#292A2D</color>
+    <color name="c_surface2">#303134</color>
+    <color name="c_text">#E8EAED</color>
+    <color name="c_text2">#9AA0A6</color>
+    <color name="c_icon">#BDC1C6</color>
+    <color name="c_accent">#8AB4F8</color>
+    <color name="c_accent_soft">#263B5A</color>
+    <color name="c_on_accent">#102A4C</color>
+    <color name="c_divider">#3C4043</color>
+    <color name="c_warn">#FDD663</color>
     <color name="c_error">#F28B82</color>
-    <color name="c_snack">#E8EAEF</color>
-    <color name="c_snack_text">#1A1C21</color>
-    <color name="c_snack_action">#3A67F0</color>
+    <color name="c_snack">#E8EAED</color>
+    <color name="c_snack_text">#202124</color>
+    <color name="c_snack_action">#1A73E8</color>
 </resources>
