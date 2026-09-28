@@ -80,6 +80,14 @@ jobs:
           (cd dist && sha256sum "Svetlo-$TAG.apk" > "Svetlo-$TAG.apk.sha256")
           rm -f "$RUNNER_TEMP/release.jks"
 
+      - name: Save signed APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Svetlo-${{ env.TAG }}-release
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
