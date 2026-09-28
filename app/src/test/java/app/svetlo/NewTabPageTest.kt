@@ -44,7 +44,7 @@ class NewTabPageTest {
         address.setText("cats and videos")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         assertTrue("an invalid search phrase should keep the form open", dialog.isShowing)
-        assertTrue("the address field should explain the error", address.error?.isNotBlank() == true)
+        assertEquals("invalid input must not be saved", 0, JSONArray(Prefs.sp.getString("ntp_pinned", "[]")).length())
 
         address.setText("example.com")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
