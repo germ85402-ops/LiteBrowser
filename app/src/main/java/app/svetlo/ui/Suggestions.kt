@@ -14,9 +14,13 @@ import app.svetlo.data.BrowserDb
 import app.svetlo.data.Entry
 import app.svetlo.data.Prefs
 import org.json.JSONArray
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Omnibox dropdown: typed text, bookmarks/history matches and search engine suggestions. */
 class Suggestions(
@@ -24,14 +28,20 @@ class Suggestions(
     private val list: ListView,
     private val onPick: (String) -> Unit,
     private val onFill: (String) -> Unit,
+    /** Optional deterministic fetcher for tests. The callback becomes false when a query is stale. */
+    private val remoteFetcher: ((String, () -> Boolean) -> List<String>)? = null,
 ) {
     private enum class Kind { GO, SEARCH, HISTORY, BOOKMARK, CLIPBOARD }
     private class Item(val kind: Kind, val title: String, val sub: String?, val value: String)
 
     private var items: List<Item> = emptyList()
-    private var seq = 0
-    private val net = Executors.newSingleThreadExecutor()
+    private val seq = AtomicInteger()
+    private val requestLock = Any()
+    private val net = Executors.newSingleThreadExecutor { task -> Thread(task, "svetlo-suggestions").apply { isDaemon = true } }
     private val main = Handler(Looper.getMainLooper())
+    private var pendingRequest: Runnable? = null
+    private var requestTask: Future<*>? = null
+    @Volatile private var activeConnection: HttpURLConnection? = null
     private val adapter = Adapter()
 
     init {
@@ -41,7 +51,11 @@ class Suggestions(
 
     /** Suggestions for an empty omnibox: copied link and recent pages. */
     fun zeroSuggest(clip: String?, withHistory: Boolean) {
-        seq++
+        invalidateRemote()
+        showZeroSuggest(clip, withHistory)
+    }
+
+    private fun showZeroSuggest(clip: String?, withHistory: Boolean) {
         val out = ArrayList<Item>()
         if (clip != null) {
             val url = Prefs.looksLikeUrl(clip)
@@ -53,24 +67,57 @@ class Suggestions(
         list.visibility = if (out.isEmpty()) View.GONE else View.VISIBLE
     }
 
-    fun query(text: String, clip: String? = null, withHistory: Boolean = true) {
+    fun query(
+        text: String,
+        clip: String? = null,
+        withHistory: Boolean = true,
+        allowRemote: Boolean = true,
+    ) {
+        val request = invalidateRemote()
         val q = text.trim()
-        val my = ++seq
-        if (q.isEmpty()) { zeroSuggest(clip, withHistory); return }
-        val local = BrowserDb.search(q, 4)
+        if (q.isEmpty()) { showZeroSuggest(clip, withHistory); return }
+        val local = BrowserDb.search(q, 4, includeHistory = withHistory)
         update(q, local, emptyList())
-        if (!Prefs.suggestions || Prefs.looksLikeUrl(q)) return
+        if (!allowRemote || !Prefs.suggestions || Prefs.looksLikeUrl(q)) return
         val url = Prefs.searchEngine.suggestUrl(q)
-        net.execute {
-            if (my != seq) return@execute
-            val remote = fetch(url)
-            main.post { if (my == seq && list.visibility == View.VISIBLE) update(q, local, remote) }
+        val pending = Runnable {
+            pendingRequest = null
+            val task = net.submit {
+                val isCurrent = { seq.get() == request && !Thread.currentThread().isInterrupted }
+                if (!isCurrent()) return@submit
+                val remote = remoteFetcher?.invoke(url, isCurrent) ?: fetch(url, request)
+                main.post { if (seq.get() == request && list.visibility == View.VISIBLE) update(q, local, remote) }
+            }
+            synchronized(requestLock) {
+                if (seq.get() == request) requestTask = task else task.cancel(true)
+            }
         }
+        pendingRequest = pending
+        main.postDelayed(pending, DEBOUNCE_MS)
     }
 
     fun hide() {
-        seq++
+        invalidateRemote()
         list.visibility = View.GONE
+    }
+
+    /** Cancels in-flight work when the owning activity is destroyed. */
+    fun close() {
+        invalidateRemote()
+        net.shutdownNow()
+    }
+
+    private fun invalidateRemote(): Int {
+        val request = seq.incrementAndGet()
+        pendingRequest?.let(main::removeCallbacks)
+        pendingRequest = null
+        val connection = synchronized(requestLock) {
+            requestTask?.cancel(true)
+            requestTask = null
+            activeConnection.also { activeConnection = null }
+        }
+        runCatching { connection?.disconnect() }
+        return request
     }
 
     private fun update(q: String, local: List<Entry>, remote: List<String>) {
@@ -86,14 +133,33 @@ class Suggestions(
         list.visibility = View.VISIBLE
     }
 
-    private fun fetch(url: String): List<String> = runCatching {
+    private fun fetch(url: String, request: Int): List<String> = runCatching {
         val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 3000
-        conn.readTimeout = 3000
+        conn.connectTimeout = 2500
+        conn.readTimeout = 2500
+        conn.useCaches = false
+        val accepted = synchronized(requestLock) {
+            if (seq.get() != request || Thread.currentThread().isInterrupted) false
+            else { activeConnection = conn; true }
+        }
+        if (!accepted) { conn.disconnect(); return emptyList() }
         try {
-            val arr = JSONArray(conn.inputStream.bufferedReader().use { it.readText() }).getJSONArray(1)
+            val out = ByteArrayOutputStream()
+            conn.inputStream.use { input ->
+                val buffer = ByteArray(4096)
+                while (true) {
+                    if (seq.get() != request || Thread.currentThread().isInterrupted) return emptyList()
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (out.size() + count > MAX_RESPONSE_BYTES) return emptyList()
+                    out.write(buffer, 0, count)
+                }
+            }
+            if (seq.get() != request) return emptyList()
+            val arr = JSONArray(String(out.toByteArray(), StandardCharsets.UTF_8)).getJSONArray(1)
             (0 until arr.length()).map { arr.getString(it) }
         } finally {
+            synchronized(requestLock) { if (activeConnection === conn) activeConnection = null }
             conn.disconnect()
         }
     }.getOrDefault(emptyList())
@@ -126,5 +192,10 @@ class Suggestions(
             }
             return v
         }
+    }
+
+    private companion object {
+        const val DEBOUNCE_MS = 180L
+        const val MAX_RESPONSE_BYTES = 64 * 1024
     }
 }

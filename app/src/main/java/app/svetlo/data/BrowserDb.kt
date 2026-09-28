@@ -73,11 +73,12 @@ object BrowserDb {
     )
 
     /** Omnibox matches: bookmarks first, then most visited history. */
-    fun search(q: String, limit: Int): List<Entry> {
+    fun search(q: String, limit: Int, includeHistory: Boolean = true): List<Entry> {
         val b = query(
             "SELECT url, title, created FROM bookmarks WHERE url LIKE ? OR title LIKE ? LIMIT $limit",
             arrayOf(like(q), like(q)), bookmark = true,
         )
+        if (!includeHistory) return b.take(limit)
         val h = query(
             "SELECT url, title, last FROM history WHERE url LIKE ? OR title LIKE ? ORDER BY visits DESC, last DESC LIMIT $limit",
             arrayOf(like(q), like(q)),

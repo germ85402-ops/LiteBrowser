@@ -160,7 +160,32 @@ open class MainActivity : Activity() {
     private val sslAllowed = HashSet<String>()
     private val sslPending = HashMap<String, MutableList<SslErrorHandler>>()
     private var siteDialog: AlertDialog? = null
-    private class BlobJob(val target: OutputTarget, val name: String, val entry: String) { var bytes = 0L }
+    private class BlobJob(val owner: Tab, val target: OutputTarget, val name: String, val entry: String) {
+        private var finished = false
+        var bytes = 0L
+            private set
+
+        @Synchronized fun append(chunk: ByteArray) {
+            check(!finished) { "download already finished" }
+            target.stream.write(chunk)
+            bytes += chunk.size
+        }
+
+        @Synchronized fun commit(): Boolean {
+            if (finished) return false
+            finished = true
+            return runCatching { target.commit() }.fold(
+                onSuccess = { true },
+                onFailure = { runCatching { target.abort() }; false },
+            )
+        }
+
+        @Synchronized fun abort() {
+            if (finished) return
+            finished = true
+            target.abort()
+        }
+    }
     private val blobJobs = ConcurrentHashMap<String, BlobJob>()
     private val mse by lazy { MseRecorder(applicationContext) { main.post { refreshToolbar() } } }
 
@@ -210,10 +235,10 @@ open class MainActivity : Activity() {
             onCloseAll = ::closeAllTabs,
             onToggleMode = ::toggleMode,
         )
-        suggestions = Suggestions(this, findViewById<ListView>(R.id.suggestions), ::navigate) {
+        suggestions = Suggestions(this, findViewById<ListView>(R.id.suggestions), ::navigate, onFill = {
             urlBar.setText(it)
             urlBar.setSelection(urlBar.text.length)
-        }
+        })
         setupToolbar()
         setupFindBar()
         applyToolbarPosition()
@@ -277,7 +302,7 @@ open class MainActivity : Activity() {
                 if (!urlBar.hasFocus()) return
                 btnClear.visibility = if (s.isEmpty()) View.GONE else View.VISIBLE
                 btnMic.visibility = if (s.isEmpty()) View.VISIBLE else View.GONE
-                suggestions.query(s.toString(), clipboardText(), !incognito)
+                suggestions.query(s.toString(), clipboardText(), !incognito, allowRemote = !incognito)
             }
         })
         urlBar.setOnEditorActionListener { _, actionId, event ->
@@ -692,6 +717,7 @@ open class MainActivity : Activity() {
 
     override fun onDestroy() {
         snackbar.commit()
+        if (::suggestions.isInitialized) suggestions.close()
         if (incognito && isFinishing) tabs.firstOrNull { it.web != null }?.web?.apply { clearCache(true); clearFormData() }
         tabs.forEach { destroyWeb(it) }
         super.onDestroy()
@@ -702,6 +728,7 @@ open class MainActivity : Activity() {
     private fun ensureWeb(tab: Tab): WebView = tab.web ?: createWeb(tab)
 
     private fun destroyWeb(tab: Tab) {
+        cancelBlobJobs(tab)
         if (mse.recordingTab === tab) stopMseRecording()
         tab.web?.let {
             webContainer.removeView(it)
@@ -836,6 +863,7 @@ open class MainActivity : Activity() {
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            cancelBlobJobs(tab)
             injectedFor = null
             tab.mseTypes.clear()
             view.evaluateJavascript(MseRecorder.hook(tab.mseArm), null)
@@ -1538,7 +1566,7 @@ open class MainActivity : Activity() {
             toast("Не удалось создать файл: ${it.message}"); return@withStoragePermission
         }
         val token = UUID.randomUUID().toString()
-        blobJobs[token] = BlobJob(target, name, Downloads.recordLocal(name, tab.url, target.mime))
+        blobJobs[token] = BlobJob(tab, target, name, Downloads.recordLocal(name, tab.url, target.mime))
         toast("Скачивание: $name")
         val js = """(function(u,t){var B=window.$BLOB_BRIDGE;fetch(u).then(function(r){return r.blob()}).then(function(b){
             var o=0,S=393216;function next(){if(o>=b.size){B.done(t);return}var f=new FileReader();
@@ -1552,14 +1580,15 @@ open class MainActivity : Activity() {
         @JavascriptInterface
         fun chunk(token: String, b64: String) {
             val job = blobJobs[token] ?: return
-            runCatching { Base64.decode(b64, Base64.DEFAULT).also { job.target.stream.write(it) }.size }
-                .onSuccess { job.bytes += it }.onFailure { fail(token, it.message) }
+            if (b64.length > MAX_BLOB_CHUNK_BASE64) { fail(token, "слишком большой фрагмент"); return }
+            runCatching { job.append(Base64.decode(b64, Base64.DEFAULT)) }
+                .onFailure { fail(token, it.message) }
         }
 
         @JavascriptInterface
         fun done(token: String) {
             val job = blobJobs.remove(token) ?: return
-            val ok = runCatching { job.target.commit() }.isSuccess
+            val ok = job.commit()
             val name = job.name
             Downloads.finishLocal(job.entry, job.target.contentUri, ok, if (ok) null else "Не удалось сохранить", job.bytes)
             main.post { toast(if (ok) "Скачано: $name" else "Не удалось сохранить $name") }
@@ -1568,10 +1597,19 @@ open class MainActivity : Activity() {
         @JavascriptInterface
         fun fail(token: String, message: String?) {
             val job = blobJobs.remove(token) ?: return
-            job.target.abort()
+            job.abort()
             val name = job.name
-            Downloads.finishLocal(job.entry, null, false, message)
+            Downloads.finishLocal(job.entry, null, false, message, job.bytes)
             main.post { toast("Не удалось скачать $name: ${message ?: "ошибка"}") }
+        }
+    }
+
+    private fun cancelBlobJobs(tab: Tab) {
+        blobJobs.entries.toList().forEach { (token, job) ->
+            if (job.owner === tab && blobJobs.remove(token, job)) {
+                job.abort()
+                Downloads.finishLocal(job.entry, null, false, "Загрузка прервана при закрытии страницы", job.bytes)
+            }
         }
     }
 
@@ -1946,5 +1984,6 @@ open class MainActivity : Activity() {
         private const val STATE_VERSION = 1
         private const val BAR_SETTLE_MS = 300L
         private const val BLOB_BRIDGE = "SvetloBlob"
+        private const val MAX_BLOB_CHUNK_BASE64 = 524_288
     }
 }

@@ -106,6 +106,15 @@ class MediaDetectorTest {
     }
 
     @Test
+    fun rememberedPlaylistDirectoriesStayBounded() {
+        val detector = MediaDetector()
+        repeat(1000) { index ->
+            detector.offer("https://cdn.example.com/playlist-$index/master.m3u8")
+        }
+        assertEquals(MediaDetector.MAX_STREAMS, detector.trackedStreamCount)
+    }
+
+    @Test
     fun domMediaWithoutAFileNameUsesThePageTitle() {
         val item = MediaItem("https://cdn.x/play?id=4", MediaKind.DIRECT, "Смешной кот")
         assertEquals("Смешной кот\nФайл · cdn.x", item.label)

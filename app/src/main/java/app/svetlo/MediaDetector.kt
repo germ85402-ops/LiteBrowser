@@ -87,6 +87,7 @@ class MediaDetector(
     }
 
     val count: Int get() = synchronized(lock) { items.size }
+    internal val trackedStreamCount: Int get() = synchronized(lock) { streams.size }
 
     /** Returns true if a new item was added. */
     fun offer(url: String): Boolean {
@@ -112,7 +113,10 @@ class MediaDetector(
                 if (streams.any { it.host == u.host && dir.startsWith(it.dir) }) return false
             } else {
                 val parent = streams.any { it.host == u.host && dir.startsWith(it.dir) && now - it.at <= variantWindowMs }
-                if (dir.length > 1) streams += Stream(u.host, dir, now)
+                if (dir.length > 1) {
+                    streams += Stream(u.host, dir, now)
+                    if (streams.size > MAX_STREAMS) streams.removeAt(0)
+                }
                 if (parent) return false
                 // Segments seen before their playlist (e.g. from the DOM scan) are dropped retroactively.
                 if (dir.length > 1) items.values.removeAll {
@@ -131,6 +135,7 @@ class MediaDetector(
     companion object {
         private val DIRECT_EXT = listOf(".mp4", ".webm", ".mkv", ".mov", ".3gp", ".m4v", ".mp3", ".m4a", ".ogg", ".flv")
         private const val MAX_ITEMS = 80
+        internal const val MAX_STREAMS = 256
         private val SEGMENT_EXT = listOf(".ts", ".m4s", ".m4f", ".cmfv", ".cmfa")
         private val CHUNK_NAME = Regex("""(^|[-_.])(seg|segment|frag|fragment|chunk)[-_]?\d+([-_.]|$)""")
         private val PREVIEW = Regex("""(^|[/_.-])(thumb|thumbs|thumbnail|thumbnails|preview|previews|sprite|sprites)([/_.-]|$)""")
