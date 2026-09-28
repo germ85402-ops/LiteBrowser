@@ -8,6 +8,7 @@ import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -80,6 +81,7 @@ import app.svetlo.ui.Snackbar
 import app.svetlo.ui.TopCropImageView
 import app.svetlo.ui.LibraryActivity
 import app.svetlo.ui.MainMenu
+import app.svetlo.ui.MediaSheet
 import app.svetlo.ui.NewTabPage
 import app.svetlo.ui.DownloadsActivity
 import app.svetlo.ui.OnboardingActivity
@@ -89,6 +91,7 @@ import app.svetlo.ui.Suggestions
 import app.svetlo.ui.TabSwitcher
 import app.svetlo.ui.color
 import app.svetlo.ui.dp
+import app.svetlo.ui.motionDuration
 import app.svetlo.ui.hideKeyboard
 import app.svetlo.ui.showKeyboard
 import org.json.JSONArray
@@ -187,7 +190,7 @@ open class MainActivity : Activity() {
         zoomOverlay = findViewById(R.id.zoomOverlay)
         snackbar = Snackbar(this, root)
         snackbar.onShift = { dy ->
-            listOf(mediaFab, findViewById<View>(R.id.tsNew)).forEach { it.animate().translationY(dy).setDuration(200).start() }
+            listOf(mediaFab, findViewById<View>(R.id.tsNew)).forEach { it.animate().translationY(dy).setDuration(motionDuration(200)).start() }
         }
         swipePeek = TopCropImageView(this).apply {
             setBackgroundColor(color(R.color.c_bg))
@@ -321,9 +324,14 @@ open class MainActivity : Activity() {
         tabCount.text = if (tabs.size > 99) ":)" else tabs.size.toString()
         if (lastTabCount >= 0 && lastTabCount != tabs.size) {
             tabCount.animate().cancel()
-            tabCount.scaleX = 1.35f
-            tabCount.scaleY = 1.35f
-            tabCount.animate().scaleX(1f).scaleY(1f).setDuration(220).start()
+            if (motionDuration(220) == 0L) {
+                tabCount.scaleX = 1f
+                tabCount.scaleY = 1f
+            } else {
+                tabCount.scaleX = 1.35f
+                tabCount.scaleY = 1.35f
+                tabCount.animate().scaleX(1f).scaleY(1f).setDuration(motionDuration(220)).start()
+            }
         }
         lastTabCount = tabs.size
         setProgress(tab)
@@ -333,7 +341,7 @@ open class MainActivity : Activity() {
         mediaFab.visibility = if ((recording != null || streams && !tab.isNtp) && !focused) View.VISIBLE else View.GONE
         mediaFab.text = when {
             recording != null -> "● Запись · ${formatMb(mse.bytes)} · Стоп"
-            videos <= 1 -> "Скачать видео"
+            videos <= 1 -> "Видео"
             else -> "Видео · $videos"
         }
         updateErrorView()
@@ -368,9 +376,14 @@ open class MainActivity : Activity() {
         } else {
             selectTab(tab)
             pageView(tab)?.let { v ->
-                v.alpha = 0f
-                v.translationY = dp(48).toFloat()
-                v.animate().alpha(1f).translationY(0f).setDuration(220).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                if (motionDuration(220) == 0L) {
+                    v.alpha = 1f
+                    v.translationY = 0f
+                } else {
+                    v.alpha = 0f
+                    v.translationY = dp(48).toFloat()
+                    v.animate().alpha(1f).translationY(0f).setDuration(motionDuration(220)).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                }
             }
             if (focus && !switcher.isShown) main.post { urlBar.showKeyboard() }
         }
@@ -1366,20 +1379,30 @@ open class MainActivity : Activity() {
         scanMedia(tab) {
             val items = tab.media.list()
             val canRecord = tab.mseTypes.isNotEmpty()
-            if (items.isEmpty() && !canRecord) {
-                toast("Видео не найдено. Запустите воспроизведение и попробуйте снова.")
-                return@scanMedia
-            }
-            val labels = items.map { it.label }.toMutableList()
-            if (canRecord) labels += "● Записать видео из плеера\nДля YouTube и сайтов без прямой ссылки на файл"
-            AlertDialog.Builder(this)
-                .setTitle("Видео на странице")
-                .setItems(labels.toTypedArray()) { _, i ->
-                    val item = items.getOrNull(i) ?: return@setItems confirmMseRecording(tab)
-                    if (item.kind == MediaKind.DIRECT) startMediaDownload(tab, item, null) else chooseStreamQuality(tab, item)
-                }
-                .setNegativeButton("Закрыть", null)
-                .show()
+            MediaSheet(
+                activity = this,
+                items = items,
+                canRecord = canRecord,
+                onPlay = { item -> openMediaInPlayer(item) },
+                onDownload = { item ->
+                    if (item.kind == MediaKind.DIRECT) startMediaDownload(tab, item, null)
+                    else chooseStreamQuality(tab, item)
+                },
+                onRecord = { confirmMseRecording(tab) },
+            ).show()
+        }
+    }
+
+    /** Passes a detected stream to Android's media-player resolver, as in ILYRO. */
+    private fun openMediaInPlayer(item: MediaItem) {
+        val uri = Uri.parse(item.url)
+        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, item.externalMimeType)
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            toast("Внешний медиаплеер не найден")
+        } catch (_: SecurityException) {
+            toast("Медиаплееру не удалось открыть этот поток")
         }
     }
 
@@ -1645,10 +1668,10 @@ open class MainActivity : Activity() {
             progress.alpha = 1f
             progress.visibility = View.VISIBLE
             if (tab.progress < progress.progress) progress.progress = tab.progress
-            else progress.setProgress(tab.progress, true)
+            else progress.setProgress(tab.progress, motionDuration(150) > 0L)
         } else if (progress.visibility == View.VISIBLE && progress.alpha == 1f) {
             progress.setProgress(100, true)
-            progress.animate().alpha(0f).setStartDelay(150).setDuration(200).withEndAction {
+            progress.animate().alpha(0f).setStartDelay(if (motionDuration(200) == 0L) 0 else 150).setDuration(motionDuration(200)).withEndAction {
                 progress.visibility = View.INVISIBLE
                 progress.progress = 0
                 progress.animate().startDelay = 0
@@ -1707,8 +1730,14 @@ open class MainActivity : Activity() {
 
     private fun animateBarShift(to: Float, onEnd: () -> Unit) {
         barAnim?.cancel()
+        val duration = motionDuration(200)
+        if (duration == 0L) {
+            setBarShift(to)
+            onEnd()
+            return
+        }
         barAnim = ValueAnimator.ofFloat(barShift, to).apply {
-            duration = 200
+            duration = duration
             interpolator = DecelerateInterpolator()
             addUpdateListener { setBarShift(it.animatedValue as Float) }
             addListener(object : AnimatorListenerAdapter() {
@@ -1794,14 +1823,14 @@ open class MainActivity : Activity() {
             swipeTarget = null
         }
         if (commit && next != null) {
-            page.animate().translationX(dir * w).setDuration(180).start()
-            swipePeek.animate().translationX(0f).setDuration(180).withEndAction {
+            page.animate().translationX(dir * w).setDuration(motionDuration(180)).start()
+            swipePeek.animate().translationX(0f).setDuration(motionDuration(180)).withEndAction {
                 done()
                 selectTab(next)
             }.start()
         } else {
-            page.animate().translationX(0f).setDuration(180).start()
-            swipePeek.animate().translationX(if (dx < 0) w else -w).setDuration(180).withEndAction(done).start()
+            page.animate().translationX(0f).setDuration(motionDuration(180)).start()
+            swipePeek.animate().translationX(if (dx < 0) w else -w).setDuration(motionDuration(180)).withEndAction(done).start()
         }
     }
 

@@ -10,13 +10,21 @@ data class MediaItem(val url: String, val kind: MediaKind, val title: String? = 
     /** Every detected kind can be downloaded (DASH via [DashDownloader], audio saved separately). */
     val isSupported: Boolean get() = true
 
+    /** MIME type used when handing this stream to an installed media player. */
+    val externalMimeType: String
+        get() = when (kind) {
+            MediaKind.HLS -> "application/vnd.apple.mpegurl"
+            MediaKind.DASH -> "application/dash+xml"
+            MediaKind.DIRECT -> DIRECT_MIME[fileName.substringAfterLast('.', "").lowercase()] ?: "*/*"
+        }
+
     val fileName: String get() = MediaDetector.fileName(url)
     val host: String get() = MediaDetector.split(url)?.host.orEmpty()
 
     /** Two-line label for a list dialog: name, then "kind · host". */
     val label: String
         get() {
-            val name = fileName.takeIf { kind == MediaKind.DIRECT || it.substringBeforeLast('.').lowercase() !in GENERIC }
+            val name = fileName.takeIf { it.isNotBlank() && (kind == MediaKind.DIRECT || it.substringBeforeLast('.').lowercase() !in GENERIC) }
                 ?: title?.takeIf { it.isNotBlank() }
                 ?: fileName.ifEmpty { host }
             val tag = when (kind) {
@@ -29,6 +37,11 @@ data class MediaItem(val url: String, val kind: MediaKind, val title: String? = 
 
     private companion object {
         val GENERIC = setOf("master", "index", "playlist", "manifest", "main", "video", "stream", "chunklist", "media", "")
+        val DIRECT_MIME = mapOf(
+            "mp4" to "video/mp4", "m4v" to "video/mp4", "3gp" to "video/3gpp", "mov" to "video/quicktime",
+            "mkv" to "video/x-matroska", "webm" to "video/webm", "flv" to "video/x-flv",
+            "mp3" to "audio/mpeg", "m4a" to "audio/mp4", "aac" to "audio/aac", "ogg" to "audio/ogg",
+        )
     }
 }
 
@@ -101,6 +114,7 @@ class MediaDetector(
                     it.kind == MediaKind.DIRECT && o != null && o.host == u.host && o.path.startsWith(dir)
                 }
             }
+            while (items.size >= MAX_ITEMS) items.remove(items.keys.first())
             items[key] = MediaItem(url, kind)
             return true
         }
@@ -110,6 +124,7 @@ class MediaDetector(
 
     companion object {
         private val DIRECT_EXT = listOf(".mp4", ".webm", ".mkv", ".mov", ".3gp", ".m4v", ".mp3", ".m4a", ".ogg", ".flv")
+        private const val MAX_ITEMS = 80
         private val SEGMENT_EXT = listOf(".ts", ".m4s", ".m4f", ".cmfv", ".cmfa")
         private val CHUNK_NAME = Regex("""(^|[-_.])(seg|segment|frag|fragment|chunk)[-_]?\d+([-_.]|$)""")
         private val PREVIEW = Regex("""(^|[/_.-])(thumb|thumbs|thumbnail|thumbnails|preview|previews|sprite|sprites)([/_.-]|$)""")
@@ -125,10 +140,11 @@ class MediaDetector(
         /** Manual split instead of java.net.URI: real-world URLs often contain characters URI rejects. */
         internal fun split(url: String): Parts? {
             val schemeEnd = url.indexOf("://")
-            if (schemeEnd <= 0 || !url.regionMatches(0, "http", 0, 4, ignoreCase = true)) return null
+            if (schemeEnd <= 0 || url.substring(0, schemeEnd).lowercase() !in setOf("http", "https")) return null
             val rest = url.substring(schemeEnd + 3).substringBefore('#')
             val authEnd = rest.indexOfAny(charArrayOf('/', '?')).let { if (it < 0) rest.length else it }
             val host = rest.substring(0, authEnd).substringAfterLast('@').lowercase()
+            if (host.isBlank()) return null
             val tail = rest.substring(authEnd)
             val path = tail.substringBefore('?').ifEmpty { "/" }
             val query = if ('?' in tail) tail.substringAfter('?') else ""

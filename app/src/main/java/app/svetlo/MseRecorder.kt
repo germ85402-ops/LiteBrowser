@@ -74,15 +74,30 @@ class MseRecorder(private val ctx: Context, private val onChange: () -> Unit) {
     inner class Bridge(private val owner: Tab) {
         @JavascriptInterface
         fun detected(id: Int, type: String) {
-            if (owner.mseTypes.add(type.ifBlank { "media" })) onChange()
+            if (id !in 1..MAX_MSE_TRACKS) return
+            val safeType = normalizeSourceBufferType(type) ?: return
+            val added = synchronized(owner.mseTypes) {
+                if (safeType in owner.mseTypes || owner.mseTypes.size >= MAX_MSE_TRACKS) false
+                else owner.mseTypes.add(safeType)
+            }
+            if (added) onChange()
         }
 
         @JavascriptInterface
         fun chunk(id: Int, type: String, init: Boolean, b64: String) {
+            // Every website can call a JavascriptInterface. Avoid decoding page-controlled data
+            // unless this tab is actively recording, and bound the native allocation first.
+            val recording = synchronized(lock) { tab === owner }
+            if (!mayDecodeChunk(recording, id, b64.length)) return
             val data = runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull() ?: return
+            if (data.isEmpty()) return
             synchronized(lock) {
                 if (tab !== owner) return
-                val t = tracks.getOrPut(id) { Track(id, type) }
+                val t = tracks[id] ?: run {
+                    if (tracks.size >= MAX_MSE_TRACKS) return
+                    Track(id, normalizeSourceBufferType(type).orEmpty()).also { tracks[id] = it }
+                }
+                if (t.type.isBlank()) t.type = normalizeSourceBufferType(type).orEmpty()
                 if (init) onInit(t, data) else write(t, data)
             }
         }
@@ -127,6 +142,18 @@ class MseRecorder(private val ctx: Context, private val onChange: () -> Unit) {
 
     companion object {
         const val BRIDGE = "SvetloMse"
+
+        // MSE pages usually use one video and one audio SourceBuffer. Keep generous room for
+        // adaptive streams while bounding bridge allocations and per-page track bookkeeping.
+        internal const val MAX_MSE_TRACKS = 8
+        internal const val MAX_MSE_TYPE_LENGTH = 128
+        internal const val MAX_MSE_CHUNK_BASE64_CHARS = 16 * 1024 * 1024
+
+        internal fun mayDecodeChunk(recording: Boolean, id: Int, encodedLength: Int): Boolean =
+            recording && id in 1..MAX_MSE_TRACKS && encodedLength in 1..MAX_MSE_CHUNK_BASE64_CHARS
+
+        internal fun normalizeSourceBufferType(type: String): String? =
+            type.takeIf { it.length <= MAX_MSE_TYPE_LENGTH }?.trim()?.ifBlank { "media" }
 
         internal fun sniffType(init: ByteArray): String {
             val s = String(init, Charsets.ISO_8859_1)
