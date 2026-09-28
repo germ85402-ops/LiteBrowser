@@ -14,6 +14,8 @@
     <string name="adblock">Блокировка рекламы</string>
     <string name="settings">Настройки</string>
     <string name="blocked_caption">рекламы и трекеров заблокировано</string>
+    <string name="frequent_sites">Часто посещаемые</string>
+    <string name="add_site">Добавить сайт</string>
     <string name="back">Назад</string>
     <string name="forward">Вперёд</string>
     <string name="home">Домой</string>

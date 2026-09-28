@@ -49,7 +49,14 @@ class MediaSheet(
         })
 
         val title = TextView(activity).apply {
-            text = "Видео на странице"
+            val hasAudio = items.any(::isAudio)
+            val hasVideo = items.any { !isAudio(it) }
+            text = when {
+                hasAudio && hasVideo -> "Видео и аудио на странице"
+                hasAudio -> "Аудио на странице"
+                hasVideo -> "Видео на странице"
+                else -> "Медиа на странице"
+            }
             textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(activity.color(R.color.c_text))
@@ -57,7 +64,7 @@ class MediaSheet(
         root.addView(title)
         root.addView(TextView(activity).apply {
             text = when {
-                items.isNotEmpty() -> "Найдено потоков: ${items.size}"
+                items.isNotEmpty() -> "Найдено файлов и потоков: ${items.size}"
                 canRecord -> "Запустите видео — поток можно записать по мере воспроизведения"
                 else -> "Запустите видео на странице, чтобы найти поток для просмотра или загрузки"
             }

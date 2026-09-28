@@ -19,16 +19,21 @@ GitHub Actions `SVETLO_KEYSTORE_BASE64`, `SVETLO_STORE_PASSWORD`, `SVETLO_KEY_AL
 
 1. Поднять `versionCode` и `versionName` в `app/build.gradle.kts`.
 2. Добавить раздел `## <versionName>` в `CHANGELOG.md` — он станет описанием релиза.
-3. После слияния в `main` поставить тег и отправить его:
+3. Чтобы выпустить pre-release прямо из `main`, включить `[prerelease]` в сообщение коммита с версией:
 
    ```sh
-   git tag v0.2.0 && git push origin v0.2.0
+   git commit -m "Release Svetlo 0.3.0-rc2 [prerelease]" && git push origin main
    ```
 
-Workflow **Release** проверит, что тег совпадает с `versionName`, соберёт и протестирует APK, проверит,
-что он подписан не debug-ключом, и опубликует GitHub Release с `Svetlo-vX.Y.Z.apk` и файлом `.sha256`.
-Теги с суффиксом (`v0.3.0-rc1`) публикуются как pre-release. Уже существующий тег можно
-переопубликовать вручную: Actions → Release → Run workflow.
+Workflow **Release** возьмёт тег из `versionName`, проверит ключ подписи, соберёт и протестирует APK,
+убедится, что подпись не debug, и опубликует GitHub Release с APK и файлом `.sha256`.
+Версия с суффиксом (`-rc2`) будет опубликована как pre-release. Обычный выпуск можно запустить тегом:
+
+   ```sh
+   git tag v0.3.0 && git push origin v0.3.0
+   ```
+
+Уже существующий тег можно переопубликовать вручную: Actions → Release → Run workflow.
 
 ## Локальная release-сборка
 

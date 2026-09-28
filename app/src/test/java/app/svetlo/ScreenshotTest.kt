@@ -9,6 +9,7 @@ import android.widget.EditText
 import app.svetlo.data.BrowserDb
 import app.svetlo.ui.AdblockActivity
 import app.svetlo.ui.DownloadsActivity
+import app.svetlo.ui.MediaSheet
 import app.svetlo.ui.OnboardingActivity
 import app.svetlo.ui.SettingsActivity
 import org.junit.Assume.assumeTrue
@@ -148,6 +149,29 @@ class ScreenshotTest {
     fun settingsScreens() {
         shot("06_settings", Robolectric.buildActivity(SettingsActivity::class.java).setup().get().also { idle() })
         shot("07_adblock", Robolectric.buildActivity(AdblockActivity::class.java).setup().get().also { idle() })
+    }
+
+    @Test
+    fun mediaSheet() {
+        val act = main()
+        act.navigate("https://example.com/video")
+        idle()
+        MediaSheet(
+            activity = act,
+            items = listOf(
+                MediaItem("https://cdn.example.com/lecture.mp4", MediaKind.DIRECT),
+                MediaItem("https://cdn.example.com/music.mp3", MediaKind.DIRECT),
+            ),
+            canRecord = true,
+            onPlay = {},
+            onDownload = {},
+            onRecord = {},
+        ).show()
+        idle()
+        val d: Dialog = ShadowDialog.getLatestDialog()
+        val dv = d.window!!.decorView
+        shotWithOverlay("18_media_sheet", act, dv, (act.window.decorView.width - dv.width) / 2, act.window.decorView.height - dv.height)
+        d.dismiss()
     }
 
     private fun seedDownloads() {

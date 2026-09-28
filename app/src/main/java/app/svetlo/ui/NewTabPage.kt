@@ -2,6 +2,8 @@ package app.svetlo.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.net.Uri
+import android.text.InputType
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
@@ -9,13 +11,16 @@ import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.widget.GridLayout
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import app.svetlo.R
 import app.svetlo.data.BrowserDb
 import app.svetlo.data.Prefs
 import app.svetlo.filter.AdBlock
+import org.json.JSONArray
 import java.text.NumberFormat
 
 /** Native start page: search pill, speed dial and ad-blocking stats. */
@@ -41,6 +46,7 @@ class NewTabPage(
         if (incognito) {
             view.findViewById<View>(R.id.ntpIncognito).visibility = View.VISIBLE
             tiles.visibility = View.GONE
+            view.findViewById<View>(R.id.ntpSitesTitle).visibility = View.GONE
             view.findViewById<View>(R.id.ntpStats).visibility = View.GONE
             view.findViewById<TextView>(R.id.ntpIncognitoText).text = if (app.svetlo.Incognito.isolated) {
                 "Браузер не сохранит историю, cookie, данные сайтов и введённые в формы данные. " +
@@ -60,14 +66,39 @@ class NewTabPage(
         tiles.removeAllViews()
         val hidden = hidden()
         val sites = LinkedHashMap<String, Pair<String, String>>() // host -> (title, url)
-        BrowserDb.topSites(8, hidden).forEach { e ->
+        val saved = pinned()
+        saved.forEach { url ->
+            val host = hostOf(url)
+            if (host !in hidden) sites.putIfAbsent(host, shortTitle("", url) to url)
+        }
+        // Keep one slot for the visible add shortcut. A full set of saved sites can use all eight.
+        val siteLimit = MAX_SITE_TILES - if (saved.size < MAX_SITE_TILES) 1 else 0
+        val autoLimit = (siteLimit - sites.size).coerceAtLeast(0)
+        BrowserDb.topSites(autoLimit, hidden + sites.keys).forEach { e ->
             sites.putIfAbsent(hostOf(e.url), shortTitle(e.title, e.url) to e.url)
         }
         DEFAULTS.forEach { (title, url) ->
             val h = hostOf(url)
-            if (sites.size < 8 && h !in hidden && h !in sites) sites[h] = title to url
+            if (sites.size < siteLimit && h !in hidden && h !in sites) sites[h] = title to url
         }
         sites.forEach { (host, v) -> tiles.addView(tile(host, v.first, v.second)) }
+        if (saved.size < MAX_SITE_TILES) tiles.addView(addShortcutTile())
+    }
+
+    private fun pinned(): List<String> = runCatching {
+        val array = JSONArray(Prefs.sp.getString(PINNED_KEY, "[]"))
+        (0 until array.length()).mapNotNull { index ->
+            array.optString(index).takeIf { url ->
+                val uri = Uri.parse(url)
+                uri.scheme in WEB_SCHEMES && !uri.host.isNullOrBlank()
+            }
+        }.distinctBy(::hostOf).take(MAX_SITE_TILES)
+    }.getOrDefault(emptyList())
+
+    private fun savePinned(urls: List<String>) {
+        val array = JSONArray()
+        urls.take(MAX_SITE_TILES).forEach { array.put(it) }
+        Prefs.sp.edit().putString(PINNED_KEY, array.toString()).apply()
     }
 
     private fun shortTitle(title: String, url: String): String {
@@ -81,6 +112,8 @@ class NewTabPage(
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, act.dp(10), 0, act.dp(10))
             background = act.themeDrawable(android.R.attr.selectableItemBackgroundBorderless)
+            contentDescription = title
+            isFocusable = true
         }
         v.addView(ImageView(act).apply { setImageDrawable(LetterIcon(url, title)) }, LinearLayout.LayoutParams(act.dp(52), act.dp(52)))
         v.addView(TextView(act).apply {
@@ -95,18 +128,108 @@ class NewTabPage(
         v.setOnClickListener { onOpen(url) }
         v.setOnLongClickListener {
             AlertDialog.Builder(act).setTitle(title).setItems(arrayOf("Убрать с экрана")) { _, _ ->
-                Prefs.sp.edit().putStringSet("ntp_hidden", hidden() + host).apply()
+                if (pinned().any { hostOf(it) == host }) savePinned(pinned().filterNot { hostOf(it) == host })
+                else Prefs.sp.edit().putStringSet("ntp_hidden", hidden() + host).apply()
                 refresh()
             }.show()
             true
         }
-        v.layoutParams = GridLayout.LayoutParams(
-            GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f),
-        ).apply { width = 0 }
+        v.layoutParams = tileLayoutParams()
         return v
     }
 
+    private fun addShortcutTile(): View = LinearLayout(act).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(0, act.dp(10), 0, act.dp(10))
+        background = act.themeDrawable(android.R.attr.selectableItemBackgroundBorderless)
+        contentDescription = "Добавить сайт в быстрый доступ"
+        isFocusable = true
+        addView(ImageView(act).apply {
+            setImageResource(R.drawable.ic_add)
+            imageTintList = android.content.res.ColorStateList.valueOf(act.color(R.color.c_accent))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(act.color(R.color.c_accent_soft))
+            }
+            setPadding(act.dp(14), act.dp(14), act.dp(14), act.dp(14))
+        }, LinearLayout.LayoutParams(act.dp(52), act.dp(52)))
+        addView(TextView(act).apply {
+            text = act.getString(R.string.add_site)
+            textSize = 12f
+            setTextColor(act.color(R.color.c_accent))
+            gravity = Gravity.CENTER
+            maxLines = 1
+            setPadding(act.dp(4), act.dp(8), act.dp(4), 0)
+        })
+        setOnClickListener { showAddShortcutDialog() }
+        layoutParams = tileLayoutParams()
+    }
+
+    private fun tileLayoutParams() = GridLayout.LayoutParams(
+            GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f),
+        ).apply { width = 0 }
+
+    private fun showAddShortcutDialog() {
+        val input = EditText(act).apply {
+            hint = "example.com"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            setSingleLine(true)
+            setPadding(act.dp(16), act.dp(12), act.dp(16), act.dp(12))
+        }
+        val dialog = AlertDialog.Builder(act)
+            .setTitle(act.getString(R.string.add_site))
+            .setMessage("Ссылка появится среди быстрых сайтов на стартовой странице.")
+            .setView(input)
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Добавить", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val text = input.text.toString().trim()
+                if (!Prefs.looksLikeUrl(text)) {
+                    input.error = "Введите адрес сайта, например example.com"
+                    return@setOnClickListener
+                }
+                val url = Prefs.toUrl(text)
+                val uri = Uri.parse(url)
+                val host = uri.host?.let(::hostOf)
+                if (uri.scheme !in WEB_SCHEMES || host.isNullOrBlank()) {
+                    input.error = "Введите полный адрес сайта"
+                    return@setOnClickListener
+                }
+                if (pinned().any { hostOf(it) == host } || host in currentHosts()) {
+                    input.error = "Этот сайт уже есть на стартовой странице"
+                    return@setOnClickListener
+                }
+                savePinned(pinned() + url)
+                Prefs.sp.edit().putStringSet("ntp_hidden", hidden() - host).apply()
+                dialog.dismiss()
+                refresh()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun currentHosts(): Set<String> {
+        val hidden = hidden()
+        val saved = pinned()
+        val result = saved.map { hostOf(it) }.filterNot { it in hidden }.toCollection(LinkedHashSet())
+        val siteLimit = MAX_SITE_TILES - if (saved.size < MAX_SITE_TILES) 1 else 0
+        val autoLimit = (siteLimit - result.size).coerceAtLeast(0)
+        BrowserDb.topSites(autoLimit, hidden + result).forEach { result += hostOf(it.url) }
+        DEFAULTS.forEach { (title, url) ->
+            val host = hostOf(url)
+            if (result.size < siteLimit && host !in hidden) result += host
+        }
+        return result
+    }
+
     companion object {
+        private const val MAX_SITE_TILES = 8
+        private const val PINNED_KEY = "ntp_pinned"
+        private val WEB_SCHEMES = setOf("http", "https")
         private val DEFAULTS = listOf(
             "Яндекс" to "https://ya.ru/",
             "YouTube" to "https://m.youtube.com/",
