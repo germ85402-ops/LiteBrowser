@@ -26,6 +26,21 @@
         <item name="android:textColorSecondary">@color/c_text2</item>
     </style>
 
+    <style name="MediaSheetDialog" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowDimAmount">0.32</item>
+        <item name="android:colorAccent">@color/c_accent</item>
+        <item name="android:windowAnimationStyle">@style/MediaSheetAnimation</item>
+    </style>
+
+    <style name="MediaSheetAnimation">
+        <item name="android:windowEnterAnimation">@anim/media_sheet_enter</item>
+        <item name="android:windowExitAnimation">@anim/media_sheet_exit</item>
+    </style>
+
     <style name="IconButton">
         <item name="android:layout_width">44dp</item>
         <item name="android:layout_height">44dp</item>
