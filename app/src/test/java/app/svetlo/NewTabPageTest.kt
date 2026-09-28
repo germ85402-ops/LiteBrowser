@@ -46,13 +46,13 @@ class NewTabPageTest {
         assertTrue("an invalid search phrase should keep the form open", dialog.isShowing)
         assertEquals("invalid input must not be saved", 0, JSONArray(Prefs.sp.getString("ntp_pinned", "[]")).length())
 
-        address.setText("example.com")
+        address.setText("shortcut-test.invalid")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         assertFalse(dialog.isShowing)
 
         val saved = JSONArray(Prefs.sp.getString("ntp_pinned", "[]"))
-        assertEquals("https://example.com", saved.getString(0))
-        assertTrue((0 until grid.childCount).map(grid::getChildAt).any { it.contentDescription == "Example" })
+        assertEquals("https://shortcut-test.invalid", saved.getString(0))
+        assertTrue((0 until grid.childCount).map(grid::getChildAt).any { it.contentDescription == "Shortcut-test" })
     }
 
     private fun findEditText(view: View): EditText? {
