@@ -26,6 +26,8 @@ class MediaDetectorTest {
         assertEquals(MediaKind.DIRECT, MediaDetector.classify("https://cdn.x/files/movie.mp4?sig=abc"))
         assertNull(MediaDetector.classify("https://cdn.x/page.html?format=m3u8x"))
         assertNull(MediaDetector.classify("blob:https://x/123"))
+        assertNull(MediaDetector.classify("httpx://cdn.x/video.mp4"))
+        assertNull(MediaDetector.classify("https:///video.mp4"))
     }
 
     @Test
@@ -90,5 +92,22 @@ class MediaDetectorTest {
         assertTrue(items[2].label.contains("Поток DASH"))
         d.clear()
         assertEquals(0, d.count)
+    }
+
+    @Test
+    fun mediaItemsExposePlayerMimeTypesAndStayBounded() {
+        assertEquals("application/vnd.apple.mpegurl", MediaItem("https://cdn.x/video.m3u8", MediaKind.HLS).externalMimeType)
+        assertEquals("application/dash+xml", MediaItem("https://cdn.x/video.mpd", MediaKind.DASH).externalMimeType)
+        assertEquals("video/mp4", MediaItem("https://cdn.x/video.MP4?token=1", MediaKind.DIRECT).externalMimeType)
+        assertEquals("audio/mpeg", MediaItem("https://cdn.x/track.mp3", MediaKind.DIRECT).externalMimeType)
+
+        repeat(100) { assertTrue(d.offer("https://cdn.x/video-$it.mp4")) }
+        assertEquals(80, d.count)
+    }
+
+    @Test
+    fun domMediaWithoutAFileNameUsesThePageTitle() {
+        val item = MediaItem("https://cdn.x/play?id=4", MediaKind.DIRECT, "Смешной кот")
+        assertEquals("Смешной кот\nФайл · cdn.x", item.label)
     }
 }

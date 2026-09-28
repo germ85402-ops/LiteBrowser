@@ -1,6 +1,9 @@
 package app.svetlo
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MseRecorderTest {
@@ -26,5 +29,23 @@ class MseRecorderTest {
         assertEquals("audio/webm", MseRecorder.sniffType(webmHeader + "....A_OPUS....".toByteArray()))
         assertEquals("video/webm", MseRecorder.sniffType(webmHeader + "..V_VP9..A_OPUS".toByteArray()))
         assertEquals(Triple("m4a", "audio/mp4", true), MseRecorder.format("", mp4Init("soun")))
+    }
+
+    @Test
+    fun rejectsPageBridgeChunksOutsideRecordingOrPastBounds() {
+        assertFalse(MseRecorder.mayDecodeChunk(recording = false, id = 1, encodedLength = 4))
+        assertFalse(MseRecorder.mayDecodeChunk(recording = true, id = 0, encodedLength = 4))
+        assertFalse(MseRecorder.mayDecodeChunk(recording = true, id = 9, encodedLength = 4))
+        assertFalse(MseRecorder.mayDecodeChunk(recording = true, id = 1, encodedLength = 0))
+        assertFalse(MseRecorder.mayDecodeChunk(recording = true, id = 1, encodedLength = MseRecorder.MAX_MSE_CHUNK_BASE64_CHARS + 1))
+        assertTrue(MseRecorder.mayDecodeChunk(recording = true, id = 1, encodedLength = 4))
+        assertTrue(MseRecorder.mayDecodeChunk(recording = true, id = 8, encodedLength = MseRecorder.MAX_MSE_CHUNK_BASE64_CHARS))
+    }
+
+    @Test
+    fun boundsSourceBufferTypesBeforeKeepingThem() {
+        assertEquals("video/mp4", MseRecorder.normalizeSourceBufferType(" video/mp4 "))
+        assertEquals("media", MseRecorder.normalizeSourceBufferType("  "))
+        assertNull(MseRecorder.normalizeSourceBufferType("x".repeat(MseRecorder.MAX_MSE_TYPE_LENGTH + 1)))
     }
 }
