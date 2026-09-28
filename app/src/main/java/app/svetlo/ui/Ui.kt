@@ -1,6 +1,7 @@
 package app.svetlo.ui
 
 import android.app.Activity
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.ColorFilter
@@ -10,6 +11,7 @@ import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -25,6 +27,10 @@ import kotlin.math.abs
 
 fun Context.dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 fun Context.color(id: Int) = getColor(id)
+
+/** Duration that follows Android's system-wide "Remove animations" setting. */
+fun Context.motionDuration(defaultMs: Long): Long =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ValueAnimator.areAnimatorsEnabled()) 0L else defaultMs
 
 fun Context.themeDrawable(attr: Int): Drawable? =
     getDrawable(TypedValue().also { theme.resolveAttribute(attr, it, true) }.resourceId)

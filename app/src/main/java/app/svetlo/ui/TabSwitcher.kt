@@ -65,7 +65,8 @@ class TabSwitcher(
         val pos = tabs.indexOf(cur).coerceAtLeast(0)
         root.visibility = View.VISIBLE
         root.alpha = 0f
-        root.animate().alpha(1f).setDuration(200).start()
+        val fadeIn = act.motionDuration(200)
+        if (fadeIn == 0L) root.alpha = 1f else root.animate().alpha(1f).setDuration(fadeIn).start()
         grid.setSelection(pos)
         val bmp = cur?.thumbnail ?: return
         hiddenTab = cur
@@ -97,12 +98,16 @@ class TabSwitcher(
         adapter.notifyDataSetChanged()
         zoom.setImageBitmap(bmp)
         animateZoom(from, pageRect()) { hiddenTab = null }
-        root.animate().alpha(0f).setStartDelay(60).setDuration(180).withEndAction { root.visibility = View.GONE; root.animate().startDelay = 0 }.start()
+        val fadeOut = act.motionDuration(180)
+        root.animate().alpha(0f).setStartDelay(if (fadeOut == 0L) 0 else 60).setDuration(fadeOut).withEndAction {
+            root.visibility = View.GONE
+            root.animate().startDelay = 0
+        }.start()
     }
 
     fun hide() {
         if (!isShown) return
-        root.animate().alpha(0f).setDuration(150).withEndAction { root.visibility = View.GONE }.start()
+        root.animate().alpha(0f).setDuration(act.motionDuration(150)).withEndAction { root.visibility = View.GONE }.start()
     }
 
     fun refresh() {
@@ -166,8 +171,15 @@ class TabSwitcher(
         val sa = state(a)
         val sb = state(b)
         zoom.visibility = View.VISIBLE
+        val zoomDuration = act.motionDuration(280)
+        if (zoomDuration == 0L) {
+            zoom.visibility = View.GONE
+            zoom.setImageDrawable(null)
+            end()
+            return
+        }
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 280
+            duration = zoomDuration
             interpolator = PathInterpolator(0.2f, 0f, 0f, 1f)
             addUpdateListener {
                 val t = it.animatedValue as Float
@@ -215,7 +227,7 @@ class TabSwitcher(
                 visibility = if (tab === hiddenTab) View.INVISIBLE else View.VISIBLE
             }
             v.findViewById<View>(R.id.tabClose).setOnClickListener {
-                v.animate().scaleX(0.8f).scaleY(0.8f).alpha(0f).setDuration(150).withEndAction {
+                v.animate().scaleX(0.8f).scaleY(0.8f).alpha(0f).setDuration(act.motionDuration(150)).withEndAction {
                     v.scaleX = 1f; v.scaleY = 1f
                     onClose(tab)
                 }.start()

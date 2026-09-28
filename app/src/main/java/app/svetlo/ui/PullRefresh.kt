@@ -100,12 +100,16 @@ class PullRefresh(ctx: Context, container: FrameLayout, private val onRefresh: (
         refreshing = true
         startedAt = SystemClock.uptimeMillis()
         view.imageAlpha = 255
-        view.animate().translationY(trigger * 0.75f - size).setDuration(150).start()
-        spin = ObjectAnimator.ofFloat(view, View.ROTATION, view.rotation, view.rotation + 360f).apply {
-            duration = 750
-            repeatCount = ValueAnimator.INFINITE
-            interpolator = LinearInterpolator()
-            start()
+        val moveDuration = ctx.motionDuration(150)
+        if (moveDuration == 0L) view.translationY = trigger * 0.75f - size
+        else view.animate().translationY(trigger * 0.75f - size).setDuration(moveDuration).start()
+        if (ctx.motionDuration(750) > 0L) {
+            spin = ObjectAnimator.ofFloat(view, View.ROTATION, view.rotation, view.rotation + 360f).apply {
+                duration = ctx.motionDuration(750)
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                start()
+            }
         }
         onRefresh()
         view.postDelayed({ finish() }, 15_000)
@@ -114,16 +118,27 @@ class PullRefresh(ctx: Context, container: FrameLayout, private val onRefresh: (
     /** Called when the page finished loading; keeps the spinner visible for a moment at least. */
     fun finish() {
         if (!refreshing) return
-        val wait = 450 - (SystemClock.uptimeMillis() - startedAt)
+        val wait = if (ctx.motionDuration(180) == 0L) 0 else 450 - (SystemClock.uptimeMillis() - startedAt)
         if (wait > 0) { view.postDelayed({ finish() }, wait); return }
         refreshing = false
         spin?.cancel()
-        view.animate().scaleX(0f).scaleY(0f).alpha(0f).setDuration(180).withEndAction { view.visibility = View.GONE }.start()
+        val durationMs = ctx.motionDuration(180)
+        if (durationMs == 0L) {
+            view.scaleX = 0f
+            view.scaleY = 0f
+            view.alpha = 0f
+            view.visibility = View.GONE
+        } else view.animate().scaleX(0f).scaleY(0f).alpha(0f).setDuration(durationMs).withEndAction { view.visibility = View.GONE }.start()
     }
 
     private fun retract() {
         dist = 0f
-        view.animate().translationY(-size.toFloat()).alpha(0f).setDuration(160)
+        val durationMs = ctx.motionDuration(160)
+        if (durationMs == 0L) {
+            view.translationY = -size.toFloat()
+            view.alpha = 0f
+            view.visibility = View.GONE
+        } else view.animate().translationY(-size.toFloat()).alpha(0f).setDuration(durationMs)
             .withEndAction { view.visibility = View.GONE }.start()
     }
 }

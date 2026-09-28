@@ -18,7 +18,7 @@ class MainMenu(private val act: MainActivity) {
         val pw = PopupWindow(v, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
         pw.setBackgroundDrawable(act.getDrawable(R.drawable.bg_popup))
         pw.elevation = act.dp(12).toFloat()
-        pw.animationStyle = if (bottom) R.style.MenuAnimBottom else R.style.MenuAnimTop
+        pw.animationStyle = if (act.motionDuration(180) == 0L) 0 else if (bottom) R.style.MenuAnimBottom else R.style.MenuAnimTop
 
         val page = !tab.isNtp
         fun item(id: Int, enabled: Boolean = true, action: () -> Unit) {

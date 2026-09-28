@@ -51,10 +51,10 @@ class SwipeToDismiss(private val onDismiss: () -> Unit) : View.OnTouchListener {
                 v.isPressed = false
                 if (swiping) {
                     if (abs(dx) > v.width * 0.4f || abs(vx) > 1200 && sign(vx) == sign(dx)) {
-                        v.animate().translationX(sign(dx) * v.width * 1.2f).alpha(0f).setDuration(160)
+                        v.animate().translationX(sign(dx) * v.width * 1.2f).alpha(0f).setDuration(v.context.motionDuration(160))
                             .withEndAction(onDismiss).start()
                     } else {
-                        v.animate().translationX(0f).alpha(1f).setDuration(160).start()
+                        v.animate().translationX(0f).alpha(1f).setDuration(v.context.motionDuration(160)).start()
                     }
                 } else if (abs(dx) < slop && abs(ev.rawY - downY) < slop) {
                     v.performClick()
@@ -63,7 +63,7 @@ class SwipeToDismiss(private val onDismiss: () -> Unit) : View.OnTouchListener {
             }
             MotionEvent.ACTION_CANCEL -> {
                 v.isPressed = false
-                if (swiping) v.animate().translationX(0f).alpha(1f).setDuration(160).start()
+                if (swiping) v.animate().translationX(0f).alpha(1f).setDuration(v.context.motionDuration(160)).start()
                 recycle()
             }
         }

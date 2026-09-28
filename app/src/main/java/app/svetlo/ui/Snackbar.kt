@@ -71,7 +71,11 @@ class Snackbar(private val act: Activity, parent: FrameLayout) {
             view.alpha = 0f
             view.translationY = act.dp(32).toFloat()
         }
-        view.animate().alpha(1f).translationY(0f).setDuration(200).start()
+        val durationMs = act.motionDuration(200)
+        if (durationMs == 0L) {
+            view.alpha = 1f
+            view.translationY = 0f
+        } else view.animate().alpha(1f).translationY(0f).setDuration(durationMs).start()
         view.post { onShift?.invoke(-(view.height + act.dp(12)).toFloat()) }
         view.postDelayed(hideRunnable, duration)
     }
@@ -81,7 +85,12 @@ class Snackbar(private val act: Activity, parent: FrameLayout) {
         commit()
         if (view.visibility != View.VISIBLE) return
         onShift?.invoke(0f)
-        view.animate().alpha(0f).translationY(act.dp(32).toFloat()).setDuration(160)
+        val durationMs = act.motionDuration(160)
+        if (durationMs == 0L) {
+            view.alpha = 0f
+            view.translationY = act.dp(32).toFloat()
+            view.visibility = View.GONE
+        } else view.animate().alpha(0f).translationY(act.dp(32).toFloat()).setDuration(durationMs)
             .withEndAction { view.visibility = View.GONE }.start()
     }
 
