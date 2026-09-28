@@ -24,7 +24,13 @@ data class MediaItem(val url: String, val kind: MediaKind, val title: String? = 
     /** Two-line label for a list dialog: name, then "kind · host". */
     val label: String
         get() {
-            val name = fileName.takeIf { it.isNotBlank() && (kind == MediaKind.DIRECT || it.substringBeforeLast('.').lowercase() !in GENERIC) }
+            val name = fileName.takeIf {
+                it.isNotBlank() && if (kind == MediaKind.DIRECT) {
+                    it.substringAfterLast('.', "").isNotEmpty()
+                } else {
+                    it.substringBeforeLast('.').lowercase() !in GENERIC
+                }
+            }
                 ?: title?.takeIf { it.isNotBlank() }
                 ?: fileName.ifEmpty { host }
             val tag = when (kind) {
