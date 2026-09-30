@@ -18,8 +18,26 @@ object Prefs {
     lateinit var sp: SharedPreferences
         private set
 
+    var isPrivate = false
+        private set
     fun init(ctx: Context) {
-        sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        isPrivate = app.svetlo.Incognito.isIncognitoProcess(ctx.applicationContext as android.app.Application)
+        val normal = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        if (!isPrivate) { sp = normal; return }
+        // A private process must never rewrite a stale snapshot of normal SharedPreferences.
+        sp = ctx.getSharedPreferences("settings-incognito", Context.MODE_PRIVATE)
+        val edit = sp.edit().clear()
+        normal.all.filterKeys { it != "tabs" && it != "tab_cur" && it != "recent_closed" }.forEach { (k, v) ->
+            when (v) {
+                is Boolean -> edit.putBoolean(k, v)
+                is Int -> edit.putInt(k, v)
+                is Long -> edit.putLong(k, v)
+                is Float -> edit.putFloat(k, v)
+                is String -> edit.putString(k, v)
+                is Set<*> -> edit.putStringSet(k, v.filterIsInstance<String>().toSet())
+            }
+        }
+        edit.commit()
     }
 
     private fun bool(key: String, def: Boolean) = sp.getBoolean(key, def)
@@ -55,6 +73,12 @@ object Prefs {
     var searchEngine: SearchEngine
         get() = runCatching { SearchEngine.valueOf(sp.getString("search_engine", null)!!) }.getOrDefault(SearchEngine.GOOGLE)
         set(v) = sp.edit().putString("search_engine", v.name).apply()
+    var customSearch: String
+        get() = sp.getString("custom_search", "").orEmpty()
+        set(value) { sp.edit().putString("custom_search", value).apply() }
+    fun searchUrl(query: String): String = if (validCustomSearch(customSearch)) customSearch.replace("%s", Uri.encode(query)) else searchEngine.searchUrl(query)
+    fun validCustomSearch(value: String) = value.contains("%s") && app.svetlo.Origin.of(value.replace("%s", "test")) != null && value.startsWith("https://")
+
     var onboarded: Boolean
         get() = bool("onboarded", false)
         set(v) = put("onboarded", v)
@@ -85,7 +109,7 @@ object Prefs {
         return when {
             t.startsWith("http://") || t.startsWith("https://") || t.startsWith("about:") -> t
             looksLikeUrl(t) -> "https://$t"
-            else -> searchEngine.searchUrl(t)
+            else -> searchUrl(t)
         }
     }
 }

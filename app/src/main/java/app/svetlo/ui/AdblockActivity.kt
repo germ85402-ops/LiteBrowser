@@ -15,7 +15,7 @@ import app.svetlo.filter.AdBlock
 import app.svetlo.filter.FilterLists
 
 /** Ad blocking settings: global switch, filter lists, site exceptions and custom rules. */
-class AdblockActivity : Activity() {
+open class AdblockActivity : Activity() {
     private lateinit var page: Page
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,35 +26,35 @@ class AdblockActivity : Activity() {
 
     private fun build() {
         page = Page(this, getString(R.string.adblock))
-        page.actions.addView(iconButton(this, R.drawable.ic_refresh, "Обновить списки") { updateNow() })
+        page.actions.addView(iconButton(this, R.drawable.ic_refresh, getString(app.svetlo.R.string.label_8d0d914d85)) { updateNow() })
 
         page.switchRow(
-            "Блокировать рекламу",
+            getString(app.svetlo.R.string.label_8acc916316),
             "Всего заблокировано: ${"%,d".format(AdBlock.totalBlocked.get())} · правил: ${"%,d".format(AdBlock.ruleCount)}",
             Prefs.adblock,
         ) { Prefs.adblock = it }
 
-        page.header("Списки фильтров")
+        page.header(getString(app.svetlo.R.string.label_cdbc1db869))
         FilterLists.all().forEach { sub ->
             val row = page.switchRow(sub.title, summary(sub), FilterLists.isEnabled(sub)) { on ->
                 FilterLists.setEnabled(sub, on)
                 if (on && !FilterLists.isDownloaded(this, sub)) updateNow(force = false) else AdBlock.rebuild { build() }
             }
             if (sub.custom) row.view.setOnLongClickListener {
-                AlertDialog.Builder(this).setTitle("Удалить список?").setMessage(sub.url)
-                    .setPositiveButton("Удалить") { _, _ -> FilterLists.removeCustom(this, sub); AdBlock.rebuild { build() } }
-                    .setNegativeButton("Отмена", null).show()
+                AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_00d30d1648)).setMessage(sub.url)
+                    .setPositiveButton(getString(app.svetlo.R.string.label_86ea33aef5)) { _, _ -> FilterLists.removeCustom(this, sub); AdBlock.rebuild { build() } }
+                    .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
                 true
             }
         }
-        page.row("Добавить список по ссылке", "Любой список в формате AdBlock Plus / uBlock / hosts") { addList() }
-        page.row("Свои правила", "Например: ||ads.example.com^ или example.com##.banner") { editRules() }
+        page.row(getString(app.svetlo.R.string.label_99a28dc479), getString(app.svetlo.R.string.label_e02613ca5d)) { addList() }
+        page.row(getString(app.svetlo.R.string.label_f72ae77771), "Например: ||ads.example.com^ или example.com##.banner") { editRules() }
 
-        page.header("Сайты-исключения")
+        page.header(getString(app.svetlo.R.string.label_aaf3212651))
         val wl = AdBlock.whitelist()
-        if (wl.isEmpty()) page.row("Нет исключений", "Отключить блокировку для сайта можно через значок щита в адресной строке")
+        if (wl.isEmpty()) page.row(getString(app.svetlo.R.string.label_92ea97ec43), getString(app.svetlo.R.string.label_b304e3922c))
         wl.forEach { host ->
-            page.row(host, "Нажмите, чтобы снова блокировать рекламу") {
+            page.row(host, getString(app.svetlo.R.string.label_6f833ed510)) {
                 AdBlock.setWhitelisted(host, false)
                 build()
             }
@@ -65,20 +65,20 @@ class AdblockActivity : Activity() {
         val upd = FilterLists.updatedAt(sub)
         val rules = FilterLists.ruleCount(sub)
         return when {
-            AdBlock.updating && !FilterLists.isDownloaded(this, sub) -> "Загрузка…"
-            !FilterLists.isDownloaded(this, sub) -> "Не загружен"
+            AdBlock.updating && !FilterLists.isDownloaded(this, sub) -> getString(app.svetlo.R.string.label_b6819e91ff)
+            !FilterLists.isDownloaded(this, sub) -> getString(app.svetlo.R.string.label_97a764cda6)
             upd == 0L -> "Встроенный · ${"%,d".format(rules)} правил"
-            rules == 0 -> if (AdBlock.updating) "Обработка…" else "Загружен, включится после обновления"
+            rules == 0 -> if (AdBlock.updating) getString(app.svetlo.R.string.label_22c04f25ec) else getString(app.svetlo.R.string.label_d57bf49aeb)
             else -> "${"%,d".format(rules)} правил · обновлён " +
                 DateUtils.getRelativeTimeSpanString(upd, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
         }
     }
 
     private fun updateNow(force: Boolean = true) {
-        Toast.makeText(this, "Обновление списков…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(app.svetlo.R.string.label_a0f32894d4), Toast.LENGTH_SHORT).show()
         AdBlock.update(force) { failed ->
             if (isFinishing || isDestroyed) return@update
-            Toast.makeText(this, if (failed == 0) "Списки обновлены" else "Не удалось загрузить списков: $failed", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, if (failed == 0) getString(app.svetlo.R.string.label_4e32bafaef) else "Не удалось загрузить списков: $failed", Toast.LENGTH_LONG).show()
             build()
         }
     }
@@ -104,25 +104,27 @@ class AdblockActivity : Activity() {
 
     private fun addList() {
         val (frame, edit) = input("https://example.com/filters.txt")
-        AlertDialog.Builder(this).setTitle("Добавить список").setView(frame)
-            .setPositiveButton("Добавить") { _, _ ->
+        AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_a7eaa4a52d)).setView(frame)
+            .setPositiveButton(getString(app.svetlo.R.string.label_559a87f7cc)) { _, _ ->
                 val url = edit.text.toString().trim()
                 if (!url.startsWith("http")) return@setPositiveButton
                 FilterLists.addCustom(url)
                 updateNow(force = false)
                 build()
             }
-            .setNegativeButton("Отмена", null).show()
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
     }
 
     private fun editRules() {
         val file = FilterLists.userRulesFile(this)
-        val (frame, edit) = input("По одному правилу в строке", if (file.exists()) file.readText() else "", multiline = true)
-        AlertDialog.Builder(this).setTitle("Свои правила").setView(frame)
-            .setPositiveButton("Сохранить") { _, _ ->
+        val (frame, edit) = input(getString(app.svetlo.R.string.label_3cedc01f60), if (file.exists()) file.readText() else "", multiline = true)
+        AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_f72ae77771)).setView(frame)
+            .setPositiveButton(getString(app.svetlo.R.string.label_4864057d62)) { _, _ ->
                 file.writeText(edit.text.toString())
                 AdBlock.rebuild { build() }
             }
-            .setNegativeButton("Отмена", null).show()
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
     }
 }
+
+class IncognitoAdblockActivity : AdblockActivity()

@@ -38,6 +38,8 @@ class Suggestions(
     private val seq = AtomicInteger()
     private val requestLock = Any()
     private val net = Executors.newSingleThreadExecutor { task -> Thread(task, "svetlo-suggestions").apply { isDaemon = true } }
+    private val localIo = Executors.newSingleThreadExecutor { task -> Thread(task, "svetlo-local-suggestions").apply { isDaemon = true } }
+    private var localTask: Future<*>? = null
     private val main = Handler(Looper.getMainLooper())
     private var pendingRequest: Runnable? = null
     private var requestTask: Future<*>? = null
@@ -59,9 +61,20 @@ class Suggestions(
         val out = ArrayList<Item>()
         if (clip != null) {
             val url = Prefs.looksLikeUrl(clip)
-            out += Item(Kind.CLIPBOARD, if (url) "Скопированная ссылка" else "Скопированный текст", clip, clip)
+            out += Item(Kind.CLIPBOARD, if (url) act.getString(app.svetlo.R.string.label_968e81913d) else act.getString(app.svetlo.R.string.label_cce8a296b7), clip, clip)
         }
-        if (withHistory) BrowserDb.history(limit = 6).forEach { e -> out += Item(Kind.HISTORY, e.title.ifBlank { e.url }, e.url, e.url) }
+        if (withHistory) {
+            val request = seq.get()
+            localTask = localIo.submit {
+                val history = runCatching { BrowserDb.history(limit = 6) }.getOrDefault(emptyList())
+                main.post {
+                    if (seq.get() != request) return@post
+                    items = out + history.map { e -> Item(Kind.HISTORY, e.title.ifBlank { e.url }, e.url, e.url) }
+                    adapter.notifyDataSetChanged()
+                    list.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }
+        }
         items = out
         adapter.notifyDataSetChanged()
         list.visibility = if (out.isEmpty()) View.GONE else View.VISIBLE
@@ -76,9 +89,13 @@ class Suggestions(
         val request = invalidateRemote()
         val q = text.trim()
         if (q.isEmpty()) { showZeroSuggest(clip, withHistory); return }
-        val local = BrowserDb.search(q, 4, includeHistory = withHistory)
-        update(q, local, emptyList())
-        if (!allowRemote || !Prefs.suggestions || Prefs.looksLikeUrl(q)) return
+        val local = java.util.concurrent.atomic.AtomicReference<List<Entry>>(emptyList())
+        update(q, local.get(), emptyList())
+        localTask = localIo.submit {
+            val found = runCatching { BrowserDb.search(q, 4, includeHistory = withHistory) }.getOrDefault(emptyList())
+            main.post { if (seq.get() == request) { local.set(found); update(q, found, emptyList()) } }
+        }
+        if (!allowRemote || !Prefs.suggestions || Prefs.customSearch.isNotBlank() || Prefs.looksLikeUrl(q)) return
         val url = Prefs.searchEngine.suggestUrl(q)
         val pending = Runnable {
             pendingRequest = null
@@ -86,7 +103,7 @@ class Suggestions(
                 val isCurrent = { seq.get() == request && !Thread.currentThread().isInterrupted }
                 if (!isCurrent()) return@submit
                 val remote = remoteFetcher?.invoke(url, isCurrent) ?: fetch(url, request)
-                main.post { if (seq.get() == request && list.visibility == View.VISIBLE) update(q, local, remote) }
+                main.post { if (seq.get() == request && list.visibility == View.VISIBLE) update(q, local.get(), remote) }
             }
             synchronized(requestLock) {
                 if (seq.get() == request) requestTask = task else task.cancel(true)
@@ -105,10 +122,13 @@ class Suggestions(
     fun close() {
         invalidateRemote()
         net.shutdownNow()
+        localIo.shutdownNow()
     }
 
     private fun invalidateRemote(): Int {
         val request = seq.incrementAndGet()
+        localTask?.cancel(true)
+        localTask = null
         pendingRequest?.let(main::removeCallbacks)
         pendingRequest = null
         val connection = synchronized(requestLock) {
@@ -122,8 +142,8 @@ class Suggestions(
 
     private fun update(q: String, local: List<Entry>, remote: List<String>) {
         val out = ArrayList<Item>()
-        out += if (Prefs.looksLikeUrl(q)) Item(Kind.GO, q, "Перейти на сайт", Prefs.toUrl(q))
-        else Item(Kind.SEARCH, q, "Поиск в ${Prefs.searchEngine.title}", q)
+        out += if (Prefs.looksLikeUrl(q)) Item(Kind.GO, q, act.getString(app.svetlo.R.string.label_940f16ef2e), Prefs.toUrl(q))
+        else Item(Kind.SEARCH, q, if (Prefs.customSearch.isNotBlank()) act.getString(app.svetlo.R.string.label_2d2e962e6c) else "Поиск в ${Prefs.searchEngine.title}", q)
         local.forEach { e ->
             out += Item(if (e.bookmark) Kind.BOOKMARK else Kind.HISTORY, e.title.ifBlank { e.url }, e.url, e.url)
         }

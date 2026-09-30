@@ -155,11 +155,10 @@ open class MainActivity : Activity() {
 
     private val pendingPermissions = HashMap<Int, () -> Unit>()
     private var nextPermissionCode = 100
-    /** Per-session site decisions, keyed by "host|what". */
-    private val siteDecisions = HashMap<String, Boolean>()
     private val sslAllowed = HashSet<String>()
     private val sslPending = HashMap<String, MutableList<SslErrorHandler>>()
-    private var siteDialog: AlertDialog? = null
+    private val sitePermissions by lazy { SitePermissions(this, incognito, { it === current && it in tabs }, ::requestAppPermissions, ::toast) }
+    private var sslDialog: AlertDialog? = null
     private class BlobJob(val owner: Tab, val target: OutputTarget, val name: String, val entry: String) {
         private var finished = false
         var bytes = 0L
@@ -192,6 +191,7 @@ open class MainActivity : Activity() {
     private lateinit var errorView: LinearLayout
     private lateinit var errorTitle: TextView
     private lateinit var errorText: TextView
+    private lateinit var httpFallback: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -366,13 +366,13 @@ open class MainActivity : Activity() {
         mediaFab.visibility = if ((recording != null || streams && !tab.isNtp) && !focused) View.VISIBLE else View.GONE
         mediaFab.text = when {
             recording != null -> "● Запись · ${formatMb(mse.bytes)} · Стоп"
-            videos <= 1 -> "Видео"
+            videos <= 1 -> getString(app.svetlo.R.string.label_8e7b9894c7)
             else -> "Видео · $videos"
         }
         updateErrorView()
     }
 
-    private fun formatMb(bytes: Long) = String.format(Locale("ru"), "%.1f МБ", bytes / 1048576.0)
+    private fun formatMb(bytes: Long) = String.format(Locale("ru"), getString(app.svetlo.R.string.label_93eb0c0182), bytes / 1048576.0)
 
     private fun displayUrl(url: String): String {
         val u = Uri.parse(url)
@@ -390,14 +390,16 @@ open class MainActivity : Activity() {
 
     internal fun newTab(url: String?, background: Boolean = false, parent: Tab? = null, focus: Boolean = url == null): Tab {
         val tab = Tab(url ?: Tab.NTP)
+        tab.desktop = SiteSettings.desktop(tab.url)
         tab.parent = parent
+        tab.lastUsed = android.os.SystemClock.elapsedRealtime()
         val idx = if (parent != null) (tabs.indexOf(parent) + 1).coerceIn(0, tabs.size) else tabs.size
         tabs.add(idx, tab)
         if (background) {
             ensureWeb(tab).apply { loadUrl(tab.url); onPause() }
             tab.loaded = true
             refreshToolbar()
-            snackbar.show("Вкладка открыта в фоне", "Перейти", onAction = { if (tab in tabs) selectTab(tab) })
+            snackbar.show(getString(app.svetlo.R.string.label_830504a381), getString(app.svetlo.R.string.label_48db038c20), onAction = { if (tab in tabs) selectTab(tab) })
         } else {
             selectTab(tab)
             pageView(tab)?.let { v ->
@@ -412,6 +414,7 @@ open class MainActivity : Activity() {
             }
             if (focus && !switcher.isShown) main.post { urlBar.showKeyboard() }
         }
+        evictInactiveTabs()
         return tab
     }
 
@@ -432,7 +435,7 @@ open class MainActivity : Activity() {
                 val state = tab.savedState
                 tab.savedState = null
                 val restored = state != null && runCatching { web.restoreState(state) }.getOrNull() != null
-                if (!restored) web.loadUrl(tab.url)
+                if (!restored) { tab.nativeOffset = tab.sessionIndex; web.loadUrl(tab.url) }
                 tab.loaded = true
             }
             web.visibility = View.VISIBLE
@@ -444,6 +447,8 @@ open class MainActivity : Activity() {
         pull.finish()
         showBars(animate = false)
         refreshToolbar()
+        tab.lastUsed = android.os.SystemClock.elapsedRealtime()
+        evictInactiveTabs()
     }
 
     /** Closes a tab; the WebView is kept until the "undo" snackbar expires. */
@@ -501,7 +506,7 @@ open class MainActivity : Activity() {
         switcher.hide()
         newTab(null, focus = false)
         snackbar.show(
-            "Все вкладки закрыты", "Отменить",
+            getString(app.svetlo.R.string.label_26cbd6084c), getString(app.svetlo.R.string.label_555ad1c0c3),
             onAction = {
                 val fresh = tabs.toList()
                 tabs.clear()
@@ -551,64 +556,58 @@ open class MainActivity : Activity() {
     }
 
     private fun saveTabs() {
-        if (incognito) return
-        val saved = tabs.filter { it.url.isNotEmpty() && it.url != "about:blank" }
-        val arr = JSONArray()
-        saved.forEach { arr.put(JSONObject().put("u", it.url).put("t", it.title)) }
-        Prefs.sp.edit().putString("tabs", arr.toString()).putInt("tab_cur", saved.indexOf(current)).apply()
-        // Back/forward history lives in a separate file; a stale or unreadable file only loses history.
-        val p = Parcel.obtain()
-        try {
-            p.writeInt(STATE_VERSION)
-            p.writeInt(saved.size)
-            saved.forEach { t ->
-                val state = if (t.isNtp) null
-                else t.web?.let { w -> Bundle().takeIf { runCatching { w.saveState(it) }.getOrNull() != null } } ?: t.savedState
-                p.writeString(t.url)
-                p.writeBundle(state)
-            }
-            stateFile().writeBytes(p.marshall())
-        } catch (_: Exception) {
-            stateFile().delete()
-        } finally {
-            p.recycle()
-        }
-    }
-
-    private fun stateFile() = File(noBackupFilesDir, "tabs.state")
-
-    private fun readTabStates(): List<Pair<String?, Bundle?>> {
-        val f = stateFile()
-        if (!f.exists()) return emptyList()
-        val p = Parcel.obtain()
-        return try {
-            val bytes = f.readBytes()
-            p.unmarshall(bytes, 0, bytes.size)
-            p.setDataPosition(0)
-            if (p.readInt() != STATE_VERSION) return emptyList()
-            List(p.readInt()) { p.readString() to p.readBundle(javaClass.classLoader) }
-        } catch (_: Exception) {
-            emptyList()
-        } finally {
-            p.recycle()
-        }
+        if (!incognito) TabSessions.save(this, TabSessions.snapshot(tabs, current))
     }
 
     private fun restoreTabs() {
-        val arr = runCatching { JSONArray(Prefs.sp.getString("tabs", "[]")) }.getOrNull() ?: return
-        val states = readTabStates()
-        var cur: Tab? = null
-        val curIdx = Prefs.sp.getInt("tab_cur", arr.length() - 1)
+        val session = TabSessions.read(this)
+        val arr = session?.optJSONArray("tabs") ?: runCatching { JSONArray(Prefs.sp.getString("tabs", "[]")) }.getOrNull() ?: return
+        val curIdx = session?.optInt("current", arr.length() - 1) ?: Prefs.sp.getInt("tab_cur", arr.length() - 1)
+        var selected: Tab? = null
         for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
+            val o = arr.optJSONObject(i) ?: continue
             val url = o.optString("u")
             if (url.isEmpty() || url == "about:blank") continue
             val tab = Tab(url, o.optString("t"))
-            states.getOrNull(i)?.takeIf { it.first == url }?.let { tab.savedState = it.second }
+            tab.desktop = o.optBoolean("desktop")
+            val history = o.optJSONArray("history")
+            tab.sessionHistory = (0 until (history?.length() ?: 0)).mapNotNull { n -> history?.optString(n)?.takeIf { Origin.of(it) != null } }.toMutableList()
+            tab.sessionIndex = o.optInt("index").coerceIn(0, (tab.sessionHistory.size - 1).coerceAtLeast(0))
             tabs += tab
-            if (i == curIdx) cur = tab
+            if (i == curIdx) selected = tab
         }
-        (cur ?: tabs.lastOrNull())?.let { selectTab(it) }
+        (selected ?: tabs.lastOrNull())?.let { selectTab(it) }
+        // One-way migration: old binary Parcel files are deliberately not deserialized.
+        File(noBackupFilesDir, "tabs.state").delete()
+    }
+
+    internal fun canGoForward(tab: Tab) = tab.web?.canGoForward() == true || tab.sessionIndex < tab.sessionHistory.lastIndex
+    internal fun goForward(tab: Tab) {
+        if (tab.web?.canGoForward() == true) tab.web?.goForward()
+        else if (tab.sessionIndex < tab.sessionHistory.lastIndex) restoreHistoryAt(tab, tab.sessionIndex + 1)
+    }
+    private fun restoreHistoryAt(tab: Tab, index: Int) {
+        val url = tab.sessionHistory.getOrNull(index) ?: return
+        destroyWeb(tab)
+        tab.savedState = null
+        tab.sessionIndex = index
+        tab.url = url
+        selectTab(tab)
+    }
+
+    private fun evictInactiveTabs(keep: Int = 4) {
+        val candidates = tabs.filter { it !== current && it.web != null && it !== mse.recordingTab }.sortedBy { it.lastUsed }
+        candidates.dropLast(keep.coerceAtLeast(0)).forEach { t ->
+            val w = t.web ?: return@forEach
+            TabSessions.capture(t)
+            t.savedState = Bundle().takeIf { w.saveState(it) != null }
+            destroyWeb(t)
+        }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) evictInactiveTabs(0)
     }
 
     // ------------------------------------------------------------------ navigation
@@ -620,7 +619,12 @@ open class MainActivity : Activity() {
         if (tab.isNtp) tab.cameFromNtp = true
         tab.url = url
         tab.title = ""
+        tab.sessionHistory.clear()
+        tab.sessionIndex = 0
+        tab.nativeOffset = 0
+        tab.desktop = SiteSettings.desktop(url)
         val web = ensureWeb(tab)
+        applySettings(web, tab)
         web.loadUrl(url)
         tab.loaded = true
         urlBar.clearFocus()
@@ -628,6 +632,7 @@ open class MainActivity : Activity() {
         switcher.hide()
         selectTab(tab)
         web.requestFocus()
+        evictInactiveTabs()
     }
 
     private fun goHome() {
@@ -641,11 +646,21 @@ open class MainActivity : Activity() {
     }
 
     private fun handleIntent(intent: Intent?): Boolean {
+        if (intent?.action == "app.svetlo.RETRY_DOWNLOAD") {
+            val entry = intent.getStringExtra("download_id")?.let(DownloadRegistry::get) ?: return false
+            if (Origin.of(entry.source) == null) return false
+            if (entry.id.startsWith("svc-")) {
+                val kind = if (entry.source.substringBefore('?').endsWith(".mpd", true)) MediaKind.DASH else MediaKind.HLS
+                startMediaDownload(current ?: newTab(null, focus = false), MediaItem(entry.source, kind), null)
+            } else downloadDirect(entry.source, entry.name, current)
+            return true
+        }
         if (intent?.action == Incognito.ACTION_NEW_TAB) {
             if (current?.isNtp != true) newTab(null) else main.post { urlBar.showKeyboard() }
             return true
         }
         val data = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return false
+        if (Origin.of(data) == null) return false
         val cur = current
         if (cur != null && cur.isNtp) navigate(data) else newTab(data)
         return true
@@ -667,6 +682,7 @@ open class MainActivity : Activity() {
             findBar.visibility == View.VISIBLE -> closeFind()
             tab == null -> moveTaskToBack(true)
             !tab.isNtp && tab.web?.canGoBack() == true -> tab.web?.goBack()
+            !tab.isNtp && tab.sessionIndex > 0 -> restoreHistoryAt(tab, tab.sessionIndex - 1)
             !tab.isNtp && tab.cameFromNtp -> goHome()
             tab.parent != null && tab.parent in tabs -> closeTab(tab)
             else -> moveTaskToBack(true)
@@ -716,8 +732,13 @@ open class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        sitePermissions.dismiss()
+        sslDialog?.dismiss()
+        fileCallback?.onReceiveValue(null)
+        fileCallback = null
         snackbar.commit()
         if (::suggestions.isInitialized) suggestions.close()
+        if (incognito && isFinishing) ArticleStore.folder(this).deleteRecursively()
         if (incognito && isFinishing) tabs.firstOrNull { it.web != null }?.web?.apply { clearCache(true); clearFormData() }
         tabs.forEach { destroyWeb(it) }
         super.onDestroy()
@@ -756,6 +777,7 @@ open class MainActivity : Activity() {
             setSupportMultipleWindows(true)
             javaScriptCanOpenWindowsAutomatically = false
             allowFileAccess = false
+            allowContentAccess = false
             mediaPlaybackRequiresUserGesture = true
         }
         applySettings(web, tab)
@@ -765,9 +787,9 @@ open class MainActivity : Activity() {
         web.addJavascriptInterface(mse.Bridge(tab), MseRecorder.BRIDGE)
         web.setDownloadListener { url, _, disposition, mime, _ ->
             val name = fileNameFor(url, disposition, mime)
-            AlertDialog.Builder(this).setTitle("Скачать файл?").setMessage(name)
-                .setPositiveButton("Скачать") { _, _ -> startDownload(url, name, mime, tab) }
-                .setNegativeButton("Отмена", null).show()
+            AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_59f91618a9)).setMessage(name)
+                .setPositiveButton(getString(app.svetlo.R.string.label_fe8f79f29d)) { _, _ -> startDownload(url, name, mime, tab) }
+                .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
             // blob: data is read from the page itself, so its tab must stay alive.
             if (tab.web?.canGoBack() != true && tab.isPopup && !url.startsWith("blob:")) closeTab(tab)
         }
@@ -789,7 +811,7 @@ open class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun applySettings(web: WebView, tab: Tab) {
         val s = web.settings
-        s.javaScriptEnabled = Prefs.javascript
+        s.javaScriptEnabled = SiteSettings.javascript(tab.url, Prefs.javascript)
         s.textZoom = Prefs.textZoom
         s.userAgentString = if (tab.desktop) desktopUa(WebSettings.getDefaultUserAgent(this)) else null
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, !Prefs.blockThirdPartyCookies)
@@ -811,6 +833,7 @@ open class MainActivity : Activity() {
     internal fun toggleDesktop() {
         val tab = current ?: return
         tab.desktop = !tab.desktop
+        if (!incognito) SiteSettings.setDesktop(tab.url, tab.desktop)
         tab.web?.let { applySettings(it, tab); it.reload() }
     }
 
@@ -828,7 +851,7 @@ open class MainActivity : Activity() {
                     tab.popupChecked = true
                     if (AdBlock.blocksNavigation(url, tab.openerHost)) {
                         AdBlock.totalBlocked.incrementAndGet()
-                        main.post { closeTab(tab); toast("Всплывающая реклама заблокирована") }
+                        main.post { closeTab(tab); toast(getString(app.svetlo.R.string.label_dce3ab6dbb)) }
                         return AdBlock.emptyResponse()
                     }
                 }
@@ -853,19 +876,29 @@ open class MainActivity : Activity() {
                 ) {
                     tab.blocked.incrementAndGet()
                     AdBlock.totalBlocked.incrementAndGet()
-                    toast("Переход на рекламный сайт заблокирован")
+                    toast(getString(app.svetlo.R.string.label_4c35c9697b))
                     return true
+                }
+                if (req.isForMainFrame) {
+                    tab.desktop = SiteSettings.desktop(uri.toString())
+                    view.settings.javaScriptEnabled = SiteSettings.javascript(uri.toString(), Prefs.javascript)
+                    view.settings.userAgentString = if (tab.desktop) desktopUa(WebSettings.getDefaultUserAgent(this@MainActivity)) else null
                 }
                 return false
             }
+            if (!req.isForMainFrame || uri.scheme in setOf("file", "content", "javascript")) return true
             openExternal(view, uri)
             return true
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            tab.generation++
+            if (tab === current) sitePermissions.dismiss()
             cancelBlobJobs(tab)
             injectedFor = null
             tab.mseTypes.clear()
+            sslAllowed.clear()
+            sslDialog?.dismiss()
             view.evaluateJavascript(MseRecorder.hook(tab.mseArm), null)
             // Scriptlets must run before page scripts to be effective; pageScript repeats them if this was too early.
             AdBlock.earlyScript(Uri.parse(url).host?.lowercase())?.let { view.evaluateJavascript(it, null) }
@@ -895,6 +928,7 @@ open class MainActivity : Activity() {
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             tab.url = url
+            TabSessions.capture(tab)
             if (tab === current) refreshToolbar()
         }
 
@@ -920,12 +954,12 @@ open class MainActivity : Activity() {
             val url = req.url.toString()
             val host = req.url.host?.removePrefix("www.") ?: url
             val (title, text) = when {
-                !isOnline() -> "Нет подключения к интернету" to "Проверьте Wi‑Fi или мобильный интернет и попробуйте снова."
-                code == ERROR_HOST_LOOKUP -> "Сайт не найден" to "Не удалось найти адрес $host. Проверьте, нет ли в нём опечатки."
-                code == ERROR_CONNECT || code == ERROR_TIMEOUT -> "Сайт не отвечает" to "$host слишком долго не отвечает или отклонил подключение."
-                code == ERROR_FAILED_SSL_HANDSHAKE -> "Не удалось установить защищённое соединение" to "$host использует неподдерживаемый протокол или неверный сертификат."
-                code == ERROR_REDIRECT_LOOP -> "Слишком много переадресаций" to "Попробуйте удалить cookie для $host."
-                else -> "Не удалось открыть страницу" to "$host: ${err.description}"
+                !isOnline() -> getString(app.svetlo.R.string.label_5a73991ea8) to "Проверьте Wi‑Fi или мобильный интернет и попробуйте снова."
+                code == ERROR_HOST_LOOKUP -> getString(app.svetlo.R.string.label_a771295a6d) to "Не удалось найти адрес $host. Проверьте, нет ли в нём опечатки."
+                code == ERROR_CONNECT || code == ERROR_TIMEOUT -> getString(app.svetlo.R.string.label_829e9b0e87) to "$host слишком долго не отвечает или отклонил подключение."
+                code == ERROR_FAILED_SSL_HANDSHAKE -> getString(app.svetlo.R.string.label_b1ffffa8ce) to "$host использует неподдерживаемый протокол или неверный сертификат."
+                code == ERROR_REDIRECT_LOOP -> getString(app.svetlo.R.string.label_8ef7a4752d) to "Попробуйте удалить cookie для $host."
+                else -> getString(app.svetlo.R.string.label_b2717fdac6) to "$host: ${err.description}"
             }
             tab.error = PageError(url, title, text)
             if (tab === current) updateErrorView()
@@ -935,10 +969,10 @@ open class MainActivity : Activity() {
             val host = Uri.parse(error.url).host?.lowercase()
             when {
                 host == null -> handler.cancel()
-                host in sslAllowed -> handler.proceed()
+                sslKey(error) in sslAllowed -> handler.proceed()
                 // Only the page's own host gets a prompt; broken third-party resources are dropped.
                 tab !== current || host != tab.pageHost -> handler.cancel()
-                sslPending.containsKey(host) -> sslPending.getValue(host) += handler
+                sslPending.containsKey(sslKey(error)) -> sslPending.getValue(sslKey(error)) += handler
                 else -> askSslProceed(host, error, handler)
             }
         }
@@ -1008,17 +1042,17 @@ open class MainActivity : Activity() {
 
         override fun onHideCustomView() = exitFullscreen()
 
-        override fun onPermissionRequest(request: PermissionRequest) = onSitePermission(request)
+        override fun onPermissionRequest(request: PermissionRequest) = sitePermissions.onSitePermission(tab, request)
 
         override fun onPermissionRequestCanceled(request: PermissionRequest) {
-            siteDialog?.dismiss()
+            sitePermissions.cancel(request)
         }
 
         override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) =
-            onGeolocationPrompt(origin, callback)
+            sitePermissions.onGeolocationPrompt(tab, origin, callback)
 
         override fun onGeolocationPermissionsHidePrompt() {
-            siteDialog?.dismiss()
+            sitePermissions.dismiss()
         }
 
         override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
@@ -1059,7 +1093,7 @@ open class MainActivity : Activity() {
             val fallback = runCatching {
                 Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME).getStringExtra("browser_fallback_url")
             }.getOrNull()
-            if (fallback != null) view.loadUrl(fallback) else toast("Нет приложения для открытия ссылки")
+            if (fallback != null && Origin.of(fallback) != null) view.loadUrl(fallback) else toast(getString(app.svetlo.R.string.label_77f0674297))
         }
     }
 
@@ -1104,7 +1138,7 @@ open class MainActivity : Activity() {
         errorView.addView(errorTitle)
         errorView.addView(errorText)
         errorView.addView(TextView(this).apply {
-            text = "Повторить"
+            text = getString(app.svetlo.R.string.label_9e506acb19)
             textSize = 15f
             setTextColor(color(R.color.c_on_accent))
             setBackgroundResource(R.drawable.bg_fab)
@@ -1112,6 +1146,20 @@ open class MainActivity : Activity() {
             setPadding(dp(28), 0, dp(28), 0)
             setOnClickListener { current?.let { reloadTab(it) } }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
+        httpFallback = TextView(this).apply {
+            text = getString(app.svetlo.R.string.label_b5a0f1f8cb)
+            textSize = 14f
+            setTextColor(color(R.color.c_text2))
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setOnClickListener {
+                val url = current?.error?.url?.takeIf { it.startsWith("https://") } ?: return@setOnClickListener
+                AlertDialog.Builder(this@MainActivity).setTitle(getString(app.svetlo.R.string.label_4e00dd028a))
+                    .setMessage(getString(app.svetlo.R.string.label_c6351aea1f))
+                    .setPositiveButton(getString(app.svetlo.R.string.label_f2cea57d22)) { _, _ -> navigate("http://" + url.removePrefix("https://")) }
+                    .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
+            }
+        }
+        errorView.addView(httpFallback)
         // Above the WebViews (added at index 0) but below the NTP, suggestions and overlays.
         webContainer.addView(errorView, webContainer.indexOfChild(ntp.view),
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -1120,6 +1168,7 @@ open class MainActivity : Activity() {
     private fun updateErrorView() {
         val err = current?.takeIf { !it.isNtp }?.error
         if (err == null) { errorView.visibility = View.GONE; return }
+        httpFallback.visibility = if (err.url.startsWith("https://")) View.VISIBLE else View.GONE
         errorTitle.text = err.title
         errorText.text = err.text
         errorView.visibility = View.VISIBLE
@@ -1132,34 +1181,42 @@ open class MainActivity : Activity() {
 
     // ------------------------------------------------------------------ site prompts
 
+    private fun sslKey(error: SslError): String {
+        val cert = android.net.http.SslCertificate.saveState(error.certificate)?.getByteArray("x509-certificate") ?: byteArrayOf()
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(cert).joinToString("") { "%02x".format(it) }
+        return "${Origin.of(error.url)}|${error.primaryError}|$digest"
+    }
+
     private fun askSslProceed(host: String, error: SslError, handler: SslErrorHandler) {
         val handlers = mutableListOf(handler)
-        sslPending[host] = handlers
+        val key = sslKey(error)
+        sslPending[key] = handlers
         val reason = when (error.primaryError) {
-            SslError.SSL_EXPIRED -> "Срок действия сертификата истёк."
-            SslError.SSL_NOTYETVALID -> "Сертификат ещё не вступил в силу."
-            SslError.SSL_IDMISMATCH -> "Сертификат выдан для другого сайта."
-            SslError.SSL_UNTRUSTED -> "Сертификат выдан недоверенным центром."
-            SslError.SSL_DATE_INVALID -> "У сертификата неверная дата."
-            else -> "Сертификат недействителен."
+            SslError.SSL_EXPIRED -> getString(app.svetlo.R.string.label_8c001d4a6d)
+            SslError.SSL_NOTYETVALID -> getString(app.svetlo.R.string.label_d53210234e)
+            SslError.SSL_IDMISMATCH -> getString(app.svetlo.R.string.label_e12dfc388b)
+            SslError.SSL_UNTRUSTED -> getString(app.svetlo.R.string.label_aa466ccd0c)
+            SslError.SSL_DATE_INVALID -> getString(app.svetlo.R.string.label_7c8b616af1)
+            else -> getString(app.svetlo.R.string.label_26f5195e4d)
         }
         var proceed = false
-        AlertDialog.Builder(this)
-            .setTitle("Подключение не защищено")
+        sslDialog = AlertDialog.Builder(this)
+            .setTitle(getString(app.svetlo.R.string.label_4a25e8a75e))
             .setMessage("$reason\n\nЗлоумышленники могут пытаться похитить ваши данные с сайта $host (например, пароли или номера карт).")
-            .setPositiveButton("Назад", null)
-            .setNegativeButton("Всё равно открыть") { _, _ -> proceed = true }
+            .setPositiveButton(getString(app.svetlo.R.string.label_f6dab074d7), null)
+            .setNegativeButton(getString(app.svetlo.R.string.label_7c9d733795)) { _, _ -> proceed = true }
             .setOnDismissListener {
-                sslPending.remove(host)
-                if (proceed) { sslAllowed += host; handlers.forEach { it.proceed() } } else handlers.forEach { it.cancel() }
+                sslPending.remove(key)
+                sslDialog = null
+                if (proceed) { sslAllowed += sslKey(error); handlers.forEach { it.proceed() } } else handlers.forEach { it.cancel() }
             }
             .show()
     }
 
     private fun askHttpAuth(host: String, realm: String?, handler: HttpAuthHandler) {
-        val user = EditText(this).apply { hint = "Имя пользователя"; setSingleLine() }
+        val user = EditText(this).apply { hint = getString(app.svetlo.R.string.label_a79f8a521d); setSingleLine() }
         val pass = EditText(this).apply {
-            hint = "Пароль"
+            hint = getString(app.svetlo.R.string.label_14f7c63cc1)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         val box = LinearLayout(this).apply {
@@ -1171,66 +1228,13 @@ open class MainActivity : Activity() {
         var done = false
         AlertDialog.Builder(this)
             .setTitle("Вход на $host")
-            .setMessage(realm?.takeIf { it.isNotBlank() }?.let { "Сайт требует авторизацию: «$it»" } ?: "Сайт требует имя пользователя и пароль")
+            .setMessage(realm?.takeIf { it.isNotBlank() }?.let { "Сайт требует авторизацию: «$it»" } ?: getString(app.svetlo.R.string.label_d119d9fb73))
             .setView(box)
-            .setPositiveButton("Войти") { _, _ -> done = true; handler.proceed(user.text.toString(), pass.text.toString()) }
-            .setNegativeButton("Отмена", null)
+            .setPositiveButton(getString(app.svetlo.R.string.label_939e95a11d)) { _, _ -> done = true; handler.proceed(user.text.toString(), pass.text.toString()) }
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null)
             .setOnDismissListener { if (!done) handler.cancel() }
             .show()
         user.showKeyboard()
-    }
-
-    /** Asks once per host and session, then requests the matching Android runtime permissions. */
-    private fun askSite(host: String, what: String, key: String, perms: List<String>, anyOf: Boolean, onResult: (Boolean) -> Unit) {
-        val grantAndroid = {
-            requestAppPermissions(perms) {
-                val ok = if (anyOf) perms.any(::hasPermission) else perms.all(::hasPermission)
-                if (!ok) toast("Нет разрешения Android на доступ к $what")
-                onResult(ok)
-            }
-        }
-        when (siteDecisions["$host|$key"]) {
-            true -> { grantAndroid(); return }
-            false -> { onResult(false); return }
-            null -> Unit
-        }
-        siteDialog?.dismiss()
-        var decided: Boolean? = null
-        siteDialog = AlertDialog.Builder(this)
-            .setTitle(host)
-            .setMessage("Сайт запрашивает доступ к $what")
-            .setPositiveButton("Разрешить") { _, _ -> decided = true }
-            .setNegativeButton("Запретить") { _, _ -> decided = false }
-            .setOnDismissListener {
-                siteDialog = null
-                decided?.let { siteDecisions["$host|$key"] = it }
-                if (decided == true) grantAndroid() else onResult(false)
-            }
-            .show()
-    }
-
-    private fun onSitePermission(request: PermissionRequest) {
-        val wanted = request.resources.filter {
-            it == PermissionRequest.RESOURCE_VIDEO_CAPTURE || it == PermissionRequest.RESOURCE_AUDIO_CAPTURE ||
-                it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
-        }
-        if (wanted.isEmpty()) { request.deny(); return }
-        val cam = PermissionRequest.RESOURCE_VIDEO_CAPTURE in wanted
-        val mic = PermissionRequest.RESOURCE_AUDIO_CAPTURE in wanted
-        // Protected media (Widevine) needs no hardware access; grant it like other browsers do.
-        if (!cam && !mic) { request.grant(wanted.toTypedArray()); return }
-        val what = when { cam && mic -> "камере и микрофону"; cam -> "камере"; else -> "микрофону" }
-        val perms = buildList { if (cam) add(Manifest.permission.CAMERA); if (mic) add(Manifest.permission.RECORD_AUDIO) }
-        askSite(request.origin.host ?: "Сайт", what, "media:$cam:$mic", perms, anyOf = false) { ok ->
-            runCatching { if (ok) request.grant(wanted.toTypedArray()) else request.deny() }
-        }
-    }
-
-    private fun onGeolocationPrompt(origin: String, callback: GeolocationPermissions.Callback) {
-        val perms = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-        askSite(Uri.parse(origin).host ?: origin, "вашему местоположению", "geo", perms, anyOf = true) { ok ->
-            callback.invoke(origin, ok, false)
-        }
     }
 
     private fun hasPermission(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
@@ -1246,9 +1250,9 @@ open class MainActivity : Activity() {
     internal fun toggleBookmark() {
         val tab = current?.takeIf { !it.isNtp } ?: return
         if (BrowserDb.isBookmarked(tab.url)) {
-            BrowserDb.removeBookmark(tab.url); toast("Закладка удалена")
+            BrowserDb.removeBookmark(tab.url); toast(getString(app.svetlo.R.string.label_c70571f4f1))
         } else {
-            BrowserDb.addBookmark(tab.url, tab.displayTitle()); toast("Добавлено в закладки")
+            BrowserDb.addBookmark(tab.url, tab.displayTitle()); toast(getString(app.svetlo.R.string.label_22168e158e))
         }
     }
 
@@ -1263,10 +1267,10 @@ open class MainActivity : Activity() {
         web.evaluateJavascript(Reader.EXTRACT_JS) { result ->
             val json = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
             val article = Reader.parse(tab.url, json)
-            if (article == null) { toast("На этой странице не найден текст статьи"); return@evaluateJavascript }
-            ReaderActivity.pending = article
+            if (article == null) { toast(getString(app.svetlo.R.string.label_93567d69a9)); return@evaluateJavascript }
+            val articleFile = runCatching { ArticleStore.write(this, article) }.getOrElse { toast("Не удалось открыть статью: ${it.message}"); return@evaluateJavascript }
             @Suppress("DEPRECATION")
-            startActivityForResult(Intent(this, ReaderActivity::class.java), REQ_READER)
+            startActivityForResult(Intent(this, if (incognito && Incognito.isolated) app.svetlo.ui.IncognitoReaderActivity::class.java else ReaderActivity::class.java).putExtra("article_file", articleFile), REQ_READER)
         }
     }
 
@@ -1277,7 +1281,7 @@ open class MainActivity : Activity() {
         runCatching {
             getSystemService(android.print.PrintManager::class.java)
                 .print(name, web.createPrintDocumentAdapter(name), android.print.PrintAttributes.Builder().build())
-        }.onFailure { toast("Печать недоступна") }
+        }.onFailure { toast(getString(app.svetlo.R.string.label_55193bbdea)) }
     }
 
     internal fun openLibrary(bookmarks: Boolean) {
@@ -1287,12 +1291,12 @@ open class MainActivity : Activity() {
 
     internal fun openSettings() {
         @Suppress("DEPRECATION")
-        startActivityForResult(Intent(this, SettingsActivity::class.java), REQ_SETTINGS)
+        startActivityForResult(Intent(this, if (incognito && Incognito.isolated) app.svetlo.ui.IncognitoSettingsActivity::class.java else SettingsActivity::class.java), REQ_SETTINGS)
     }
 
     internal fun openAdblockSettings() {
         @Suppress("DEPRECATION")
-        startActivityForResult(Intent(this, AdblockActivity::class.java), REQ_SETTINGS)
+        startActivityForResult(Intent(this, if (incognito && Incognito.isolated) app.svetlo.ui.IncognitoAdblockActivity::class.java else AdblockActivity::class.java), REQ_SETTINGS)
     }
 
     internal fun openDownloads() {
@@ -1334,9 +1338,9 @@ open class MainActivity : Activity() {
         val host = tab.host ?: return
         val v = layoutInflater.inflate(R.layout.dialog_site, null)
         v.findViewById<TextView>(R.id.siteHost).text = host.removePrefix("www.")
-        val secure = tab.url.startsWith("https://")
+        val secure = tab.url.startsWith("https://") && sslAllowed.none { it.startsWith("${Origin.of(tab.url)}|") }
         v.findViewById<TextView>(R.id.siteSecurity).apply {
-            text = if (secure) "Защищённое соединение" else "Незащищённое соединение"
+            text = if (secure) getString(app.svetlo.R.string.label_bf321a8152) else getString(app.svetlo.R.string.label_e25e7b065c)
             setCompoundDrawablesRelativeWithIntrinsicBounds(if (secure) R.drawable.ic_lock else R.drawable.ic_info_warn, 0, 0, 0)
         }
         v.findViewById<TextView>(R.id.siteBlocked).text = tab.blocked.get().toString()
@@ -1349,8 +1353,38 @@ open class MainActivity : Activity() {
             tab.web?.reload()
             refreshToolbar()
         }
-        v.findViewById<View>(R.id.siteSettings).setOnClickListener { dialog.dismiss(); openAdblockSettings() }
+        v.findViewById<View>(R.id.siteSettings).setOnClickListener { dialog.dismiss(); showSiteSettings() }
         dialog.show()
+    }
+
+    private fun showSiteSettings() {
+        val tab = current ?: return
+        val url = tab.url
+        val origin = Origin.of(url) ?: return
+        val items = arrayOf("JavaScript: ${if (SiteSettings.javascript(url, Prefs.javascript)) getString(app.svetlo.R.string.label_bbbf38509d) else getString(app.svetlo.R.string.label_0b48cc8756)}",
+            "Версия для ПК: ${if (tab.desktop) getString(app.svetlo.R.string.label_b9147aa121) else getString(app.svetlo.R.string.label_3bafb21566)}", "Сбросить разрешения и настройки сайта", "Удалить локальное хранилище сайта", "Настройки блокировки", "Камера", "Микрофон", "Местоположение")
+        AlertDialog.Builder(this).setTitle(origin).setItems(items) { _, i ->
+            when (i) {
+                0 -> { SiteSettings.setJavascript(url, !SiteSettings.javascript(url, Prefs.javascript)); tab.web?.let { applySettings(it, tab); it.reload() } }
+                1 -> toggleDesktop()
+                2 -> { SiteSettings.reset(url); sitePermissions.reset(origin); sslAllowed.clear(); toast(getString(app.svetlo.R.string.label_f4e996a084)) }
+                3 -> AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_100807b171)).setMessage(getString(app.svetlo.R.string.label_4bc8a2d58d))
+                    .setPositiveButton(getString(app.svetlo.R.string.label_86ea33aef5)) { _, _ ->
+                        android.webkit.WebStorage.getInstance().deleteOrigin(Uri.parse(url).let { "${it.scheme}://${it.authority}" })
+                        val cookies = CookieManager.getInstance().getCookie(url).orEmpty().split(';').map { it.substringBefore('=').trim() }.filter { it.isNotBlank() }
+                        cookies.forEach { CookieManager.getInstance().setCookie(url, "$it=; Max-Age=0; Path=/") }
+                        CookieManager.getInstance().flush()
+                        tab.web?.reload()
+                    }.setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
+                4 -> openAdblockSettings()
+                5, 6, 7 -> {
+                    val key = when (i) { 5 -> "media:true:false"; 6 -> "media:false:true"; else -> "geo" }
+                    AlertDialog.Builder(this).setTitle(items[i]).setItems(arrayOf(getString(app.svetlo.R.string.label_dcf0bfb35e), getString(app.svetlo.R.string.label_616bb19d6c), getString(app.svetlo.R.string.label_21aba91387))) { _, choice ->
+                        sitePermissions.setDecision(origin, key, if (choice == 0) null else choice == 1)
+                    }.show()
+                }
+            }
+        }.show()
     }
 
     // ------------------------------------------------------------------ find in page
@@ -1428,24 +1462,24 @@ open class MainActivity : Activity() {
         try {
             startActivity(intent)
         } catch (_: ActivityNotFoundException) {
-            toast("Внешний медиаплеер не найден")
+            toast(getString(app.svetlo.R.string.label_56a3ac2897))
         } catch (_: SecurityException) {
-            toast("Медиаплееру не удалось открыть этот поток")
+            toast(getString(app.svetlo.R.string.label_a54167e3d2))
         }
     }
 
     private fun confirmMseRecording(tab: Tab) {
         AlertDialog.Builder(this)
-            .setTitle("Запись видео из плеера")
+            .setTitle(getString(app.svetlo.R.string.label_b9c2dcd395))
             .setMessage(
-                "Страница перезагрузится, и Svetlo начнёт сохранять то, что загружает плеер.\n\n" +
+                getString(app.svetlo.R.string.label_a5fdb66fdb) +
                     "• Выберите нужное качество и досмотрите видео до конца (можно ускорить воспроизведение).\n" +
                     "• Перемотка вперёд пропускает часть видео.\n" +
                     "• Видео и звук обычно сохраняются двумя файлами.\n\n" +
-                    "Нажмите «Стоп» на кнопке записи, когда закончите.",
+                    getString(app.svetlo.R.string.label_d9233d66bf),
             )
-            .setPositiveButton("Начать") { _, _ -> startMseRecording(tab) }
-            .setNegativeButton("Отмена", null)
+            .setPositiveButton(getString(app.svetlo.R.string.label_14eaa871df)) { _, _ -> startMseRecording(tab) }
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null)
             .show()
     }
 
@@ -1462,14 +1496,14 @@ open class MainActivity : Activity() {
         tab?.web?.evaluateJavascript("window.__svMseRec&&window.__svMseRec(false)", null)
         tab?.mseArm = false
         val files = mse.stop()
-        toast(if (files.isEmpty()) "Запись пуста: видео не воспроизводилось" else "Сохранено: " + files.joinToString(", "))
+        toast(if (files.isEmpty()) getString(app.svetlo.R.string.label_593d4f4892) else getString(app.svetlo.R.string.label_35ea9a2aa0) + files.joinToString(", "))
         refreshToolbar()
     }
 
     /** Loads the stream's quality list off the main thread, then lets the user pick one. */
     private fun chooseStreamQuality(tab: Tab, item: MediaItem) {
         val headers = requestHeaders(item.url, tab)
-        toast("Получаю список качеств…")
+        toast(getString(app.svetlo.R.string.label_026843c815))
         Thread {
             val result = runCatching { StreamDownloader.variants(item.url, headers, item.kind) }
             val variants = result.getOrDefault(emptyList())
@@ -1477,15 +1511,15 @@ open class MainActivity : Activity() {
                 if (isFinishing || isDestroyed) return@post
                 // DRM and live streams can't be saved; say so instead of starting a job that fails.
                 result.exceptionOrNull()?.let { e ->
-                    if (item.kind == MediaKind.DASH) { toast(HlsDownloadService.describe(e)); return@post }
+                    toast(HlsDownloadService.describe(e)); return@post
                 }
                 if (variants.size <= 1) { startMediaDownload(tab, item, variants.firstOrNull()); return@post }
                 val auto = StreamDownloader.pickDefault(variants)
-                val labels = listOf("Авто" + (auto?.let { " (${it.label})" } ?: "")) + variants.map { it.label }
+                val labels = listOf(getString(app.svetlo.R.string.label_5695330ffb) + (auto?.let { " (${it.label})" } ?: "")) + variants.map { it.label }
                 AlertDialog.Builder(this)
-                    .setTitle("Качество видео")
+                    .setTitle(getString(app.svetlo.R.string.label_a41671308a))
                     .setItems(labels.toTypedArray()) { _, i -> startMediaDownload(tab, item, if (i == 0) auto else variants[i - 1]) }
-                    .setNegativeButton("Отмена", null)
+                    .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null)
                     .show()
             }
         }.start()
@@ -1502,7 +1536,7 @@ open class MainActivity : Activity() {
                     title = item.title ?: tab.title.takeIf { it.isNotBlank() },
                     variantUrl = variant?.url, audioUrl = variant?.audioUrl, kind = item.kind,
                 )
-                toast(if (variant?.audioUrl != null) "Загрузка началась. Звук сохранится отдельным файлом" else "Загрузка началась")
+                toast(if (variant?.audioUrl != null) getString(app.svetlo.R.string.label_705ba22f50) else getString(app.svetlo.R.string.label_755f98538b))
             }
         } else {
             val guessed = URLUtil.guessFileName(item.url, null, null)
@@ -1516,6 +1550,7 @@ open class MainActivity : Activity() {
         val h = hashMapOf("User-Agent" to (tab?.web?.settings?.userAgentString ?: WebSettings.getDefaultUserAgent(this)))
         tab?.url?.takeIf { it.startsWith("http") }?.let { h["Referer"] = it }
         CookieManager.getInstance().getCookie(url)?.let { h["Cookie"] = it }
+        h["X-Svetlo-Origin"] = url
         return h
     }
 
@@ -1580,7 +1615,7 @@ open class MainActivity : Activity() {
         @JavascriptInterface
         fun chunk(token: String, b64: String) {
             val job = blobJobs[token] ?: return
-            if (b64.length > MAX_BLOB_CHUNK_BASE64) { fail(token, "слишком большой фрагмент"); return }
+            if (b64.length > MAX_BLOB_CHUNK_BASE64) { fail(token, getString(app.svetlo.R.string.label_94d5315e28)); return }
             runCatching { job.append(Base64.decode(b64, Base64.DEFAULT)) }
                 .onFailure { fail(token, it.message) }
         }
@@ -1590,7 +1625,7 @@ open class MainActivity : Activity() {
             val job = blobJobs.remove(token) ?: return
             val ok = job.commit()
             val name = job.name
-            Downloads.finishLocal(job.entry, job.target.contentUri, ok, if (ok) null else "Не удалось сохранить", job.bytes)
+            Downloads.finishLocal(job.entry, job.target.contentUri, ok, if (ok) null else getString(app.svetlo.R.string.label_9f476bf247), job.bytes)
             main.post { toast(if (ok) "Скачано: $name" else "Не удалось сохранить $name") }
         }
 
@@ -1600,7 +1635,7 @@ open class MainActivity : Activity() {
             job.abort()
             val name = job.name
             Downloads.finishLocal(job.entry, null, false, message, job.bytes)
-            main.post { toast("Не удалось скачать $name: ${message ?: "ошибка"}") }
+            main.post { toast("Не удалось скачать $name: ${message ?: getString(app.svetlo.R.string.label_c394f7f85f)}") }
         }
     }
 
@@ -1608,7 +1643,7 @@ open class MainActivity : Activity() {
         blobJobs.entries.toList().forEach { (token, job) ->
             if (job.owner === tab && blobJobs.remove(token, job)) {
                 job.abort()
-                Downloads.finishLocal(job.entry, null, false, "Загрузка прервана при закрытии страницы", job.bytes)
+                Downloads.finishLocal(job.entry, null, false, getString(app.svetlo.R.string.label_2a38591b3f), job.bytes)
             }
         }
     }
@@ -1619,7 +1654,7 @@ open class MainActivity : Activity() {
                 .setTitle(name)
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Svetlo/$name")
-            requestHeaders(url, tab).forEach { (k, v) -> req.addRequestHeader(k, v) }
+            requestHeaders(url, tab).filterKeys { it != "X-Svetlo-Origin" }.forEach { (k, v) -> req.addRequestHeader(k, v) }
             val id = getSystemService(DownloadManager::class.java).enqueue(req)
             Downloads.recordSystem(this, id, name, url, mimeFor(name, null))
             toast("Скачивание: $name")
@@ -1631,7 +1666,7 @@ open class MainActivity : Activity() {
     private fun withStoragePermission(action: () -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { action(); return }
         requestAppPermissions(listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) action() else toast("Нужно разрешение на запись файлов")
+            if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) action() else toast(getString(app.svetlo.R.string.label_f108c515df))
         }
     }
 
@@ -1662,21 +1697,21 @@ open class MainActivity : Activity() {
     private fun contextMenu(tab: Tab, link: String?, image: String?) {
         val actions = ArrayList<Pair<String, () -> Unit>>()
         if (link != null && link.startsWith("http")) {
-            actions += "Открыть в новой вкладке" to { newTab(link, parent = tab); Unit }
-            actions += "Открыть в фоновой вкладке" to { newTab(link, background = true, parent = tab); Unit }
-            if (!incognito) actions += "Открыть в режиме инкогнито" to { openIncognito(link) }
-            actions += "Копировать ссылку" to { copy(link) }
-            actions += "Поделиться ссылкой" to {
+            actions += getString(app.svetlo.R.string.label_97acdc2609) to { newTab(link, parent = tab); Unit }
+            actions += getString(app.svetlo.R.string.label_3d2d68e371) to { newTab(link, background = true, parent = tab); Unit }
+            if (!incognito) actions += getString(app.svetlo.R.string.label_19089b985a) to { openIncognito(link) }
+            actions += getString(app.svetlo.R.string.label_69d7d7248a) to { copy(link) }
+            actions += getString(app.svetlo.R.string.label_d11806aee2) to {
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), null))
             }
-            actions += "Скачать по ссылке" to { downloadDirect(link, URLUtil.guessFileName(link, null, null), tab) }
+            actions += getString(app.svetlo.R.string.label_a02ed5f254) to { downloadDirect(link, URLUtil.guessFileName(link, null, null), tab) }
         }
         if (image != null && image.startsWith("http")) {
-            actions += "Открыть изображение в новой вкладке" to { newTab(image, parent = tab); Unit }
-            actions += "Скачать изображение" to { downloadDirect(image, URLUtil.guessFileName(image, null, "image/*"), tab) }
-            actions += "Копировать адрес изображения" to { copy(image) }
+            actions += getString(app.svetlo.R.string.label_1d77a17dc0) to { newTab(image, parent = tab); Unit }
+            actions += getString(app.svetlo.R.string.label_83ac3ff759) to { downloadDirect(image, URLUtil.guessFileName(image, null, "image/*"), tab) }
+            actions += getString(app.svetlo.R.string.label_6c09637d78) to { copy(image) }
         } else if (image != null && image.startsWith("data:image/")) {
-            actions += "Скачать изображение" to { downloadData(image, fileNameFor(image, null, null)) }
+            actions += getString(app.svetlo.R.string.label_83ac3ff759) to { downloadData(image, fileNameFor(image, null, null)) }
         }
         if (actions.isEmpty()) return
         val title = TextView(this).apply {
@@ -1693,7 +1728,7 @@ open class MainActivity : Activity() {
 
     private fun copy(text: String) {
         getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("url", text))
-        if (Build.VERSION.SDK_INT < 33) toast("Скопировано")
+        if (Build.VERSION.SDK_INT < 33) toast(getString(app.svetlo.R.string.label_8922542f90))
     }
 
     internal fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
@@ -1876,7 +1911,7 @@ open class MainActivity : Activity() {
 
     private fun showTabsPopup(anchor: View) {
         val pm = PopupMenu(this, anchor)
-        pm.menu.add(0, 1, 0, "Закрыть вкладку")
+        pm.menu.add(0, 1, 0, getString(app.svetlo.R.string.label_d19457bde2))
         pm.menu.add(0, 2, 1, getString(R.string.new_tab))
         pm.menu.add(0, 3, 2, getString(R.string.incognito_new))
         pm.setOnMenuItemClickListener {
@@ -1916,14 +1951,14 @@ open class MainActivity : Activity() {
 
     internal fun showRecentTabs() {
         val arr = runCatching { JSONArray(Prefs.sp.getString("recent_closed", "[]")) }.getOrDefault(JSONArray())
-        if (arr.length() == 0) { toast("Недавно закрытых вкладок нет"); return }
+        if (arr.length() == 0) { toast(getString(app.svetlo.R.string.label_603efe32a4)); return }
         val items = (0 until arr.length()).map { arr.getJSONObject(it) }
         AlertDialog.Builder(this).setTitle(getString(R.string.recent_tabs))
             .setItems(items.map { it.optString("t").ifBlank { it.optString("u") } }.toTypedArray()) { _, i ->
                 newTab(items[i].optString("u"))
             }
-            .setNeutralButton("Очистить") { _, _ -> Prefs.sp.edit().remove("recent_closed").apply() }
-            .setNegativeButton("Закрыть", null)
+            .setNeutralButton(getString(app.svetlo.R.string.label_98b2073ed1)) { _, _ -> Prefs.sp.edit().remove("recent_closed").apply() }
+            .setNegativeButton(getString(app.svetlo.R.string.label_4ae50d3073), null)
             .show()
     }
 
@@ -1936,7 +1971,7 @@ open class MainActivity : Activity() {
         val tab = current?.takeIf { !it.isNtp } ?: return
         if (Build.VERSION.SDK_INT < 26) return
         val sm = getSystemService(ShortcutManager::class.java)
-        if (!sm.isRequestPinShortcutSupported) { toast("Лаунчер не поддерживает ярлыки"); return }
+        if (!sm.isRequestPinShortcutSupported) { toast(getString(app.svetlo.R.string.label_f4fb666b93)); return }
         val size = dp(48)
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val fav = tab.favicon
@@ -1956,12 +1991,12 @@ open class MainActivity : Activity() {
     private fun startVoiceSearch() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Говорите")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, getString(app.svetlo.R.string.label_574080fa70))
         try {
             @Suppress("DEPRECATION")
             startActivityForResult(i, REQ_VOICE)
         } catch (_: Exception) {
-            toast("Голосовой поиск недоступен")
+            toast(getString(app.svetlo.R.string.label_f2a32462a8))
         }
     }
 

@@ -656,16 +656,8 @@ class FilterEngine {
             }
         }
 
-        /** Approximate registrable domain (eTLD+1) without shipping the public suffix list. */
-        fun baseDomain(h: String): String {
-            val last = h.lastIndexOf('.')
-            if (last <= 0) return h
-            val second = h.lastIndexOf('.', last - 1)
-            if (second < 0) return h
-            if (h.length - last - 1 == 2 && h.substring(second + 1, last) in SLDS) {
-                return h.substring(h.lastIndexOf('.', second - 1) + 1)
-            }
-            return h.substring(second + 1)
-        }
+        @Volatile private var suffixes = PublicSuffix("com\norg\nnet\nco.uk\ncom.au\ncom.ru\norg.ru\nnet.ru\ngithub.io\nappspot.com")
+        fun loadPublicSuffix(text: String) { suffixes = PublicSuffix(text) }
+        fun baseDomain(h: String): String = suffixes.domain(h)
     }
 }

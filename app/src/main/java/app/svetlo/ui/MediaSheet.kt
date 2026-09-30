@@ -52,10 +52,10 @@ class MediaSheet(
             val hasAudio = items.any(::isAudio)
             val hasVideo = items.any { !isAudio(it) }
             text = when {
-                hasAudio && hasVideo -> "Видео и аудио на странице"
-                hasAudio -> "Аудио на странице"
-                hasVideo -> "Видео на странице"
-                else -> "Медиа на странице"
+                hasAudio && hasVideo -> activity.getString(app.svetlo.R.string.label_7be96fa0ab)
+                hasAudio -> activity.getString(app.svetlo.R.string.label_6868e4a6c3)
+                hasVideo -> activity.getString(app.svetlo.R.string.label_34d788e58f)
+                else -> activity.getString(app.svetlo.R.string.label_0a7bf2e89f)
             }
             textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
@@ -65,8 +65,8 @@ class MediaSheet(
         root.addView(TextView(activity).apply {
             text = when {
                 items.isNotEmpty() -> "Найдено файлов и потоков: ${items.size}"
-                canRecord -> "Запустите видео — поток можно записать по мере воспроизведения"
-                else -> "Запустите видео на странице, чтобы найти поток для просмотра или загрузки"
+                canRecord -> activity.getString(app.svetlo.R.string.label_346e0e0fd0)
+                else -> activity.getString(app.svetlo.R.string.label_d5874e5452)
             }
             textSize = 13f
             setTextColor(activity.color(R.color.c_text2))
@@ -78,7 +78,7 @@ class MediaSheet(
         }
         if (items.isEmpty()) {
             list.addView(TextView(activity).apply {
-                text = "Когда плеер начнёт воспроизведение, вернитесь сюда. Svetlo покажет прямые файлы и доступные потоки HLS/DASH."
+                text = activity.getString(app.svetlo.R.string.label_334a2e153a)
                 textSize = 14f
                 setTextColor(activity.color(R.color.c_text2))
                 setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
@@ -106,14 +106,14 @@ class MediaSheet(
 
         if (canRecord) {
             val recordButton = TextView(activity).apply {
-                text = "Записать видео из плеера"
+                text = activity.getString(app.svetlo.R.string.label_dc69c54f56)
                 textSize = 15f
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.CENTER
                 minHeight = activity.dp(48)
                 setTextColor(activity.color(R.color.c_accent))
                 background = activity.themeDrawable(android.R.attr.selectableItemBackground)
-                contentDescription = "Записать видео, которое воспроизводится на странице"
+                contentDescription = activity.getString(app.svetlo.R.string.label_8ae37ecf9d)
                 setOnClickListener { dialog.dismiss(); onRecord() }
             }
             root.addView(recordButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(52)).apply {
@@ -176,7 +176,7 @@ class MediaSheet(
         }
         val pieces = item.label.split('\n', limit = 2)
         labels.addView(TextView(activity).apply {
-            text = pieces.firstOrNull().orEmpty().ifBlank { "Медиафайл" }
+            text = pieces.firstOrNull().orEmpty().ifBlank { activity.getString(app.svetlo.R.string.label_6dfcda8ff6) }
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(activity.color(R.color.c_text))
@@ -198,9 +198,9 @@ class MediaSheet(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        actions.addView(actionButton("В плеер", primary = false, action = onPlay),
+        actions.addView(actionButton(activity.getString(app.svetlo.R.string.label_9c5f607c24), primary = false, action = onPlay),
             LinearLayout.LayoutParams(0, activity.dp(44), 1f).apply { marginEnd = activity.dp(8) })
-        actions.addView(actionButton("Скачать", primary = true, action = onDownload),
+        actions.addView(actionButton(activity.getString(app.svetlo.R.string.label_fe8f79f29d), primary = true, action = onDownload),
             LinearLayout.LayoutParams(0, activity.dp(44), 1f))
         card.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = activity.dp(12)

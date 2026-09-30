@@ -247,4 +247,22 @@ class ScreenshotTest {
         val dv = d.window!!.decorView
         shotWithOverlay("09_site_info", act, dv, (act.window.decorView.width - dv.width) / 2, (act.window.decorView.height - dv.height) / 2)
     }
+    @Test
+    @Config(qualifiers = "w800dp-h1100dp-xhdpi")
+    fun tabletTabSearch() {
+        val activity = main()
+        activity.newTab("https://example.com/alpha", focus = false).title = "Alpha"
+        activity.newTab("https://example.com/beta", focus = false).title = "Beta"
+        activity.findViewById<View>(R.id.btnTabs).performClick()
+        idle()
+        val search = activity.findViewById<EditText>(R.id.tsSearch)
+        search.setText("Alpha")
+        idle()
+        val grid = activity.findViewById<android.widget.GridView>(R.id.tsGrid)
+        org.junit.Assert.assertEquals(1, grid.adapter.count)
+        org.junit.Assert.assertTrue(grid.numColumns >= 3)
+        shot("tablet-tab-search", activity)
+        activity.finish()
+    }
+
 }

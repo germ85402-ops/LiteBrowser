@@ -49,11 +49,11 @@ class NewTabPage(
             view.findViewById<View>(R.id.ntpSitesTitle).visibility = View.GONE
             view.findViewById<View>(R.id.ntpStats).visibility = View.GONE
             view.findViewById<TextView>(R.id.ntpIncognitoText).text = if (app.svetlo.Incognito.isolated) {
-                "Браузер не сохранит историю, cookie, данные сайтов и введённые в формы данные. " +
-                    "Всё удалится, когда вы закроете последнюю вкладку инкогнито.\n\n" +
-                    "Загруженные файлы и закладки сохранятся. Сайты, провайдер и работодатель по-прежнему могут видеть ваши действия."
+                act.getString(app.svetlo.R.string.label_0ae8d8f423) +
+                    act.getString(app.svetlo.R.string.label_17ac6760bf) +
+                    act.getString(app.svetlo.R.string.label_82744d0f16)
             } else {
-                "Браузер не сохранит историю посещений и вкладки. На этой версии Android cookie общие с обычными вкладками."
+                act.getString(app.svetlo.R.string.label_ec102be15f)
             }
         }
     }
@@ -127,7 +127,7 @@ class NewTabPage(
         })
         v.setOnClickListener { onOpen(url) }
         v.setOnLongClickListener {
-            AlertDialog.Builder(act).setTitle(title).setItems(arrayOf("Убрать с экрана")) { _, _ ->
+            AlertDialog.Builder(act).setTitle(title).setItems(arrayOf(act.getString(app.svetlo.R.string.label_34624db8cf))) { _, _ ->
                 if (pinned().any { hostOf(it) == host }) savePinned(pinned().filterNot { hostOf(it) == host })
                 else Prefs.sp.edit().putStringSet("ntp_hidden", hidden() + host).apply()
                 refresh()
@@ -143,7 +143,7 @@ class NewTabPage(
         gravity = Gravity.CENTER_HORIZONTAL
         setPadding(0, act.dp(10), 0, act.dp(10))
         background = act.themeDrawable(android.R.attr.selectableItemBackgroundBorderless)
-        contentDescription = "Добавить сайт в быстрый доступ"
+        contentDescription = act.getString(app.svetlo.R.string.label_d8702293cc)
         isFocusable = true
         addView(ImageView(act).apply {
             setImageResource(R.drawable.ic_add)
@@ -180,27 +180,27 @@ class NewTabPage(
         }
         val dialog = AlertDialog.Builder(act)
             .setTitle(act.getString(R.string.add_site))
-            .setMessage("Ссылка появится среди быстрых сайтов на стартовой странице.")
+            .setMessage(act.getString(app.svetlo.R.string.label_d1dd3bea02))
             .setView(input)
-            .setNegativeButton("Отмена", null)
-            .setPositiveButton("Добавить", null)
+            .setNegativeButton(act.getString(app.svetlo.R.string.label_0ec753be8d), null)
+            .setPositiveButton(act.getString(app.svetlo.R.string.label_559a87f7cc), null)
             .create()
         dialog.show()
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val text = input.text.toString().trim()
             if (!Prefs.looksLikeUrl(text)) {
-                input.error = "Введите адрес сайта, например example.com"
+                input.error = act.getString(app.svetlo.R.string.label_4882aa0535)
                 return@setOnClickListener
             }
             val url = Prefs.toUrl(text)
             val uri = Uri.parse(url)
             val host = uri.host?.let(::hostOf)
             if (uri.scheme !in WEB_SCHEMES || host.isNullOrBlank()) {
-                input.error = "Введите полный адрес сайта"
+                input.error = act.getString(app.svetlo.R.string.label_af8ef203ba)
                 return@setOnClickListener
             }
             if (pinned().any { hostOf(it) == host } || host in currentHosts()) {
-                input.error = "Этот сайт уже есть на стартовой странице"
+                input.error = act.getString(app.svetlo.R.string.label_00c4063bf3)
                 return@setOnClickListener
             }
             savePinned(pinned() + url)

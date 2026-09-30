@@ -42,6 +42,7 @@ class HlsDownloadService : Service() {
         val kind: MediaKind,
     ) {
         @Volatile var cancelled = false
+        @Volatile var paused = false
         val noteId get() = 1000 + id
         val entryId get() = "svc-$id"
     }
@@ -63,6 +64,15 @@ class HlsDownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_PAUSE || intent?.action == ACTION_RESUME) {
+            val job = jobs[intent.getIntExtra(EXTRA_JOB, -1)]
+            if (job != null) {
+                job.paused = intent.action == ACTION_PAUSE
+                DownloadRegistry.update(job.entryId) { it.copy(status = if (job.paused) DownloadStatus.PAUSED else DownloadStatus.RUNNING, speed = 0.0) }
+                nm.notify(job.noteId, progressNote(job, job.title ?: "Видео", if (job.paused) "Приостановлено" else "Продолжаю…", 0))
+            } else if (jobs.isEmpty()) stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_CANCEL) {
             val job = jobs[intent.getIntExtra(EXTRA_JOB, -1)]
             if (job != null) {
@@ -125,7 +135,7 @@ class HlsDownloadService : Service() {
         var videoSaved = false
         try {
             if (job.cancelled) throw InterruptedException("cancelled")
-            val dl = HlsDownloader(job.headers) { job.cancelled }
+            val dl = HlsDownloader(job.headers, isPaused = { job.paused }) { job.cancelled }
             val videoPl: HlsDownloader.Playlist
             val audioPl: (() -> HlsDownloader.Playlist)?
             if (job.kind == MediaKind.DASH) {
@@ -163,8 +173,7 @@ class HlsDownloadService : Service() {
                 if (job.cancelled) throw audioError
             }
             val text = when {
-                audioName != null -> "Звук сохранён отдельным файлом «$audioName»: склеить дорожки без ffmpeg нельзя, " +
-                    "откройте оба файла в плеере или видеоредакторе."
+                audioName != null -> "Звук сохранён отдельным файлом «$audioName». Совместимые MP4/AAC можно объединить в менеджере загрузок."
                 audioError != null -> "Видео сохранено без звука: звуковую дорожку скачать не удалось (${describe(audioError)})."
                 else -> "Сохранено в Download/Svetlo"
             }
@@ -219,7 +228,7 @@ class HlsDownloadService : Service() {
             val s = speed
             DownloadRegistry.update(job.entryId) {
                 it.copy(
-                    status = DownloadStatus.RUNNING, bytes = bytes, percent = pct, speed = s,
+                    status = if (job.paused) DownloadStatus.PAUSED else DownloadStatus.RUNNING, bytes = bytes, percent = pct, speed = s,
                     message = if (prefix.isEmpty()) null else "Загрузка звука",
                 )
             }
@@ -290,6 +299,8 @@ class HlsDownloadService : Service() {
         private const val EXTRA_AUDIO = "audio"
         private const val EXTRA_KIND = "kind"
         private const val EXTRA_JOB = "job"
+        private const val ACTION_PAUSE = "app.svetlo.PAUSE_DOWNLOAD"
+        private const val ACTION_RESUME = "app.svetlo.RESUME_DOWNLOAD"
         private const val ACTION_CANCEL = "app.svetlo.CANCEL_DOWNLOAD"
 
         // Seeded from time so job notifications of a previous process aren't silently replaced.
@@ -318,6 +329,10 @@ class HlsDownloadService : Service() {
                 .putExtra(EXTRA_KIND, kind.name)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i) else ctx.startService(i)
         }
+
+        fun pause(ctx: Context, jobId: Int, paused: Boolean): Boolean = runCatching {
+            ctx.startService(Intent(ctx, HlsDownloadService::class.java).setAction(if (paused) ACTION_PAUSE else ACTION_RESUME).putExtra(EXTRA_JOB, jobId))
+        }.isSuccess
 
         /** Cancels a running/queued job (see [DownloadEntry.jobId]). Returns false if the service couldn't be reached. */
         fun cancel(ctx: Context, jobId: Int): Boolean = runCatching {

@@ -28,7 +28,7 @@ class MainMenu(private val act: MainActivity) {
             view.setOnClickListener { pw.dismiss(); action() }
         }
 
-        item(R.id.mForward, tab.web?.canGoForward() == true) { tab.web?.goForward() }
+        item(R.id.mForward, act.canGoForward(tab)) { act.goForward(tab) }
         v.findViewById<ImageButton>(R.id.mBookmark).setImageResource(
             if (page && BrowserDb.isBookmarked(tab.url)) R.drawable.ic_star else R.drawable.ic_star_border,
         )
@@ -47,6 +47,7 @@ class MainMenu(private val act: MainActivity) {
         item(R.id.mHistory) { act.openLibrary(bookmarks = false) }
         if (act.incognito) v.findViewById<View>(R.id.mRecent).visibility = View.GONE
         item(R.id.mBookmarks) { act.openLibrary(bookmarks = true) }
+        item(R.id.mReadingList) { act.startActivity(android.content.Intent(act, ReadingListActivity::class.java)) }
         item(R.id.mDownloads) { act.openDownloads() }
         item(R.id.mFind, page) { act.startFind() }
         item(R.id.mReader, page) { act.openReader() }

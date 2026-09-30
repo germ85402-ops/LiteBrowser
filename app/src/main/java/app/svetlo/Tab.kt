@@ -22,6 +22,11 @@ class Tab(var url: String, var title: String = "") {
     var openerHost: String? = null
     /** WebView history restored from disk, applied when the tab is first shown. */
     var savedState: Bundle? = null
+    var sessionHistory = mutableListOf<String>()
+    var sessionIndex = 0
+    var nativeOffset = 0
+    var lastUsed = 0L
+    var generation = 0L
     var error: PageError? = null
     /** SourceBuffer MIME types the page created; non-empty means the page streams through MSE. */
     val mseTypes: MutableSet<String> = java.util.Collections.synchronizedSet(LinkedHashSet())

@@ -107,5 +107,11 @@ object BrowserDb {
         db.insertWithOnConflict("bookmarks", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    fun importBookmarks(entries: List<Pair<String, String>>) {
+        db.beginTransaction()
+        try { entries.forEach { (url, title) -> addBookmark(url, title) }; db.setTransactionSuccessful() }
+        finally { db.endTransaction() }
+    }
+
     fun removeBookmark(url: String) = db.delete("bookmarks", "url = ?", arrayOf(url))
 }

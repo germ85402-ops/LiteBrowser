@@ -18,11 +18,12 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import app.svetlo.Article
 import app.svetlo.R
+import app.svetlo.ArticleStore
 import app.svetlo.Reader
 import app.svetlo.data.Prefs
 
 /** Distraction-free view of an extracted article. Links return to the browser tab. */
-class ReaderActivity : Activity() {
+open class ReaderActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var bar: LinearLayout
     private lateinit var article: Article
@@ -31,7 +32,7 @@ class ReaderActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        article = pending ?: run { finish(); return }
+        article = app.svetlo.ReadingList.read(this, intent.getStringExtra("offline_article")) ?: ArticleStore.read(this, savedInstanceState?.getString("article_file") ?: intent.getStringExtra("article_file")) ?: pending ?: run { finish(); return }
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         bar = LinearLayout(this).apply {
@@ -47,9 +48,15 @@ class ReaderActivity : Activity() {
             setTextColor(color(R.color.c_text2))
             setPadding(dp(4), 0, 0, 0)
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bar.addView(textButton("A−", "Уменьшить шрифт") { setFont(Prefs.readerFont - 2) })
-        bar.addView(textButton("A+", "Увеличить шрифт") { setFont(Prefs.readerFont + 2) })
-        bar.addView(textButton("Aa", "Шрифт с засечками") { Prefs.readerSerif = !Prefs.readerSerif; render(keepScroll = true) })
+        if (this !is IncognitoReaderActivity) bar.addView(iconButton(this, R.drawable.ic_bookmark, getString(R.string.save_offline)) {
+            Thread {
+                val result = runCatching { app.svetlo.ReadingList.save(applicationContext, article) }
+                runOnUiThread { android.widget.Toast.makeText(this, if (result.isSuccess) "Статья сохранена для чтения офлайн" else "Не удалось сохранить статью", android.widget.Toast.LENGTH_SHORT).show() }
+            }.start()
+        })
+        bar.addView(textButton("A−", getString(app.svetlo.R.string.label_d1584cb6e2)) { setFont(Prefs.readerFont - 2) })
+        bar.addView(textButton("A+", getString(app.svetlo.R.string.label_0e34fd5ee0)) { setFont(Prefs.readerFont + 2) })
+        bar.addView(textButton("Aa", getString(app.svetlo.R.string.label_b6e3f0f010)) { Prefs.readerSerif = !Prefs.readerSerif; render(keepScroll = true) })
         bar.addView(textButton("◐", "Тема") { Prefs.readerTheme = (theme().ordinal + 1) % Reader.Theme.entries.size; render(keepScroll = true) })
         bar.addView(iconButton(this, R.drawable.ic_share, getString(R.string.share)) {
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, article.url), null))
@@ -58,7 +65,9 @@ class ReaderActivity : Activity() {
 
         web = WebView(this).apply {
             settings.javaScriptEnabled = false
+            settings.blockNetworkLoads = intent.hasExtra("offline_article")
             settings.allowFileAccess = false
+            settings.allowContentAccess = false
             settings.textZoom = 100
             isVerticalScrollBarEnabled = true
             webViewClient = object : WebViewClient() {
@@ -122,7 +131,7 @@ class ReaderActivity : Activity() {
 
     override fun onDestroy() {
         if (::web.isInitialized) web.destroy()
-        if (isFinishing) pending = null
+        if (isFinishing) { pending = null; ArticleStore.remove(this, intent.getStringExtra("article_file")) }
         super.onDestroy()
     }
 
@@ -133,3 +142,6 @@ class ReaderActivity : Activity() {
         var pending: Article? = null
     }
 }
+
+/** Keeps private reader state in the private process. */
+class IncognitoReaderActivity : ReaderActivity()

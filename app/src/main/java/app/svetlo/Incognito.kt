@@ -39,6 +39,8 @@ object Incognito {
     /** Deletes leftover incognito WebView data. Must run before WebView is used in the incognito process. */
     fun wipe(ctx: Context, fromMainProcess: Boolean) {
         if (!isolated || fromMainProcess && processRunning(ctx)) return
+        File(ctx.dataDir, "shared_prefs/settings-incognito.xml").delete()
+        File(ctx.dataDir, "shared_prefs/settings-incognito.xml.bak").delete()
         listOfNotNull(ctx.dataDir, ctx.cacheDir).forEach { root -> deleteMatching(root, 0) }
     }
 

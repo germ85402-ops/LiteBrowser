@@ -35,4 +35,232 @@
     <string name="translate">Перевести</string>
     <string name="add_home">Добавить на главный экран</string>
     <string name="downloads_empty">Здесь появятся скачанные файлы</string>
+    <string name="tab_search">Поиск вкладок</string>
+    <string name="reading_list">Список чтения</string>
+    <string name="save_offline">Сохранить для чтения офлайн</string>
+    <string name="custom_search">Свой поисковик</string>
+    <string name="backup_export">Экспорт закладок и настроек</string>
+    <string name="backup_import">Импорт закладок и настроек</string>
+    <string name="label_00c4063bf3" formatted="false">Этот сайт уже есть на стартовой странице</string>
+    <string name="label_00d30d1648" formatted="false">Удалить список?</string>
+    <string name="label_0243318ec9" formatted="false">Очистить всю историю?</string>
+    <string name="label_026843c815" formatted="false">Получаю список качеств…</string>
+    <string name="label_051ea779d1" formatted="false">История очищена</string>
+    <string name="label_07ab1b9acb" formatted="false">Нужен HTTPS-адрес с %s вместо запроса</string>
+    <string name="label_0a7bf2e89f" formatted="false">Медиа на странице</string>
+    <string name="label_0ae8d8f423" formatted="false">Браузер не сохранит историю, cookie, данные сайтов и введённые в формы данные. </string>
+    <string name="label_0b48cc8756" formatted="false">выключен</string>
+    <string name="label_0c3ab8d749" formatted="false">Завершённые загрузки исчезнут из списка. Файлы останутся на устройстве.</string>
+    <string name="label_0e34fd5ee0" formatted="false">Увеличить шрифт</string>
+    <string name="label_0ec753be8d" formatted="false">Отмена</string>
+    <string name="label_100807b171" formatted="false">Удалить локальное хранилище сайта?</string>
+    <string name="label_1259571a15" formatted="false">Открыть</string>
+    <string name="label_127492c294" formatted="false">Основное</string>
+    <string name="label_136bdcb8e4" formatted="false">Отменить загрузку</string>
+    <string name="label_14eaa871df" formatted="false">Начать</string>
+    <string name="label_14f7c63cc1" formatted="false">Пароль</string>
+    <string name="label_17ac6760bf" formatted="false">Всё удалится, когда вы закроете последнюю вкладку инкогнито.\n\n</string>
+    <string name="label_18e40f59bd" formatted="false">Страницы грузятся быстрее и без трекеров</string>
+    <string name="label_19089b985a" formatted="false">Открыть в режиме инкогнито</string>
+    <string name="label_19c4595aba" formatted="false">Очистить кэш и cookie</string>
+    <string name="label_1d77a17dc0" formatted="false">Открыть изображение в новой вкладке</string>
+    <string name="label_1fcbde02de" formatted="false">Обычные вкладки</string>
+    <string name="label_206a34de6a" formatted="false">Данные сайтов удалены</string>
+    <string name="label_21aba91387" formatted="false">Запретить</string>
+    <string name="label_22168e158e" formatted="false">Добавлено в закладки</string>
+    <string name="label_22c04f25ec" formatted="false">Обработка…</string>
+    <string name="label_252b8b6ea8" formatted="false">Обновить страницу жестом сверху</string>
+    <string name="label_26cbd6084c" formatted="false">Все вкладки закрыты</string>
+    <string name="label_26f5195e4d" formatted="false">Сертификат недействителен.</string>
+    <string name="label_272eec4fdb" formatted="false">Затемнять сайты в тёмном режиме системы</string>
+    <string name="label_2a38591b3f" formatted="false">Загрузка прервана при закрытии страницы</string>
+    <string name="label_2d2e962e6c" formatted="false">Поиск в своём поисковике</string>
+    <string name="label_334a2e153a" formatted="false">Когда плеер начнёт воспроизведение, вернитесь сюда. Svetlo покажет прямые файлы и доступные потоки HLS/DASH.</string>
+    <string name="label_34624db8cf" formatted="false">Убрать с экрана</string>
+    <string name="label_346e0e0fd0" formatted="false">Запустите видео — поток можно записать по мере воспроизведения</string>
+    <string name="label_34d788e58f" formatted="false">Видео на странице</string>
+    <string name="label_356dbd9a03" formatted="false">Блокировка рекламы и трекеров</string>
+    <string name="label_35ea9a2aa0" formatted="false">Сохранено: </string>
+    <string name="label_3bafb21566" formatted="false">выключена</string>
+    <string name="label_3cedc01f60" formatted="false">По одному правилу в строке</string>
+    <string name="label_3d2d68e371" formatted="false">Открыть в фоновой вкладке</string>
+    <string name="label_4205b1307e" formatted="false">Приостановить</string>
+    <string name="label_4864057d62" formatted="false">Сохранить</string>
+    <string name="label_4882aa0535" formatted="false">Введите адрес сайта, например example.com</string>
+    <string name="label_48db038c20" formatted="false">Перейти</string>
+    <string name="label_49261ec6a4" formatted="false">Ссылка скопирована</string>
+    <string name="label_4a25e8a75e" formatted="false">Подключение не защищено</string>
+    <string name="label_4ae50d3073" formatted="false">Закрыть</string>
+    <string name="label_4bc8a2d58d" formatted="false">Также удалятся доступные cookie текущего адреса. Для полной очистки всех cookie используйте общие настройки.</string>
+    <string name="label_4c35c9697b" formatted="false">Переход на рекламный сайт заблокирован</string>
+    <string name="label_4d9fd9a9b3" formatted="false">Свайп вниз по адресной строке</string>
+    <string name="label_4e00dd028a" formatted="false">Открыть без шифрования?</string>
+    <string name="label_4e32bafaef" formatted="false">Списки обновлены</string>
+    <string name="label_4ead607955" formatted="false">Повторить загрузку</string>
+    <string name="label_55193bbdea" formatted="false">Печать недоступна</string>
+    <string name="label_555ad1c0c3" formatted="false">Отменить</string>
+    <string name="label_558923761b" formatted="false">Удалить файл</string>
+    <string name="label_559a87f7cc" formatted="false">Добавить</string>
+    <string name="label_5695330ffb" formatted="false">Авто</string>
+    <string name="label_56a3ac2897" formatted="false">Внешний медиаплеер не найден</string>
+    <string name="label_574080fa70" formatted="false">Говорите</string>
+    <string name="label_593d4f4892" formatted="false">Запись пуста: видео не воспроизводилось</string>
+    <string name="label_59f91618a9" formatted="false">Скачать файл?</string>
+    <string name="label_5a73991ea8" formatted="false">Нет подключения к интернету</string>
+    <string name="label_5acaa694fe" formatted="false">Удалить кэш, cookie и данные сайтов?</string>
+    <string name="label_5c036faae2" formatted="false">Тёмная тема для сайтов</string>
+    <string name="label_5ccd43e336" formatted="false">Удалить файл?</string>
+    <string name="label_603efe32a4" formatted="false">Недавно закрытых вкладок нет</string>
+    <string name="label_604832779d" formatted="false">Поиск в закладках</string>
+    <string name="label_607f1ccf7c" formatted="false">Системные загрузки</string>
+    <string name="label_60cadd7396" formatted="false">Потянуть вниз для обновления</string>
+    <string name="label_616bb19d6c" formatted="false">Разрешить</string>
+    <string name="label_63c10d31d1" formatted="false">Системные загрузки недоступны</string>
+    <string name="label_6868e4a6c3" formatted="false">Аудио на странице</string>
+    <string name="label_69d7d7248a" formatted="false">Копировать ссылку</string>
+    <string name="label_6c09637d78" formatted="false">Копировать адрес изображения</string>
+    <string name="label_6dfcda8ff6" formatted="false">Медиафайл</string>
+    <string name="label_6f833ed510" formatted="false">Нажмите, чтобы снова блокировать рекламу</string>
+    <string name="label_705ba22f50" formatted="false">Загрузка началась. Звук сохранится отдельным файлом</string>
+    <string name="label_71c599386d" formatted="false">Конфиденциальность</string>
+    <string name="label_72c81bea7a" formatted="false">Очистить историю посещений?</string>
+    <string name="label_735781aa15" formatted="false">Объединяю дорожки…</string>
+    <string name="label_755f98538b" formatted="false">Загрузка началась</string>
+    <string name="label_77f0674297" formatted="false">Нет приложения для открытия ссылки</string>
+    <string name="label_7be96fa0ab" formatted="false">Видео и аудио на странице</string>
+    <string name="label_7c8b616af1" formatted="false">У сертификата неверная дата.</string>
+    <string name="label_7c9d733795" formatted="false">Всё равно открыть</string>
+    <string name="label_7e967753a7" formatted="false">HTTPS-адрес с %s вместо запроса</string>
+    <string name="label_7f17c7c62a" formatted="false">Настройки</string>
+    <string name="label_7f2be1ba3d" formatted="false">Блокировка рекламы</string>
+    <string name="label_82744d0f16" formatted="false">Загруженные файлы и закладки сохранятся. Сайты, провайдер и работодатель по-прежнему могут видеть ваши действия.</string>
+    <string name="label_829e9b0e87" formatted="false">Сайт не отвечает</string>
+    <string name="label_830504a381" formatted="false">Вкладка открыта в фоне</string>
+    <string name="label_83ac3ff759" formatted="false">Скачать изображение</string>
+    <string name="label_86b552e23a" formatted="false">Новая вкладка инкогнито</string>
+    <string name="label_86ea33aef5" formatted="false">Удалить</string>
+    <string name="label_87079b51d2" formatted="false">Блокировать сторонние cookie</string>
+    <string name="label_891cbb5363" formatted="false">Удобнее для работы одной рукой</string>
+    <string name="label_8922542f90" formatted="false">Скопировано</string>
+    <string name="label_8acc916316" formatted="false">Блокировать рекламу</string>
+    <string name="label_8ae37ecf9d" formatted="false">Записать видео, которое воспроизводится на странице</string>
+    <string name="label_8c001d4a6d" formatted="false">Срок действия сертификата истёк.</string>
+    <string name="label_8d0d914d85" formatted="false">Обновить списки</string>
+    <string name="label_8d2fab2d12" formatted="false">Да</string>
+    <string name="label_8e7b9894c7" formatted="false">Видео</string>
+    <string name="label_8ead3cd747" formatted="false">Очистить историю</string>
+    <string name="label_8ef7a4752d" formatted="false">Слишком много переадресаций</string>
+    <string name="label_9231cd7902" formatted="false">Список пока пуст</string>
+    <string name="label_92ea97ec43" formatted="false">Нет исключений</string>
+    <string name="label_93567d69a9" formatted="false">На этой странице не найден текст статьи</string>
+    <string name="label_939e95a11d" formatted="false">Войти</string>
+    <string name="label_93eb0c0182" formatted="false">%.1f МБ</string>
+    <string name="label_940f16ef2e" formatted="false">Перейти на сайт</string>
+    <string name="label_94d5315e28" formatted="false">слишком большой фрагмент</string>
+    <string name="label_968e81913d" formatted="false">Скопированная ссылка</string>
+    <string name="label_97a764cda6" formatted="false">Не загружен</string>
+    <string name="label_97acdc2609" formatted="false">Открыть в новой вкладке</string>
+    <string name="label_9827140f7c" formatted="false">Жесты</string>
+    <string name="label_98b2073ed1" formatted="false">Очистить</string>
+    <string name="label_9978ac34b2" formatted="false">Действия</string>
+    <string name="label_99a28dc479" formatted="false">Добавить список по ссылке</string>
+    <string name="label_9ae3022506" formatted="false">Поисковые подсказки</string>
+    <string name="label_9c5f607c24" formatted="false">В плеер</string>
+    <string name="label_9e506acb19" formatted="false">Повторить</string>
+    <string name="label_9f476bf247" formatted="false">Не удалось сохранить</string>
+    <string name="label_a02ed5f254" formatted="false">Скачать по ссылке</string>
+    <string name="label_a0f32894d4" formatted="false">Обновление списков…</string>
+    <string name="label_a2569c1e10" formatted="false">Резервная копия сохранена</string>
+    <string name="label_a25f3cd79e" formatted="false">Адресная строка</string>
+    <string name="label_a29296ac2c" formatted="false">Выйдет из аккаунтов на сайтах</string>
+    <string name="label_a41671308a" formatted="false">Качество видео</string>
+    <string name="label_a54167e3d2" formatted="false">Медиаплееру не удалось открыть этот поток</string>
+    <string name="label_a5fdb66fdb" formatted="false">Страница перезагрузится, и Svetlo начнёт сохранять то, что загружает плеер.\n\n</string>
+    <string name="label_a771295a6d" formatted="false">Сайт не найден</string>
+    <string name="label_a79f8a521d" formatted="false">Имя пользователя</string>
+    <string name="label_a7eaa4a52d" formatted="false">Добавить список</string>
+    <string name="label_a895c38d59" formatted="false">Адресная строка внизу</string>
+    <string name="label_aa466ccd0c" formatted="false">Сертификат выдан недоверенным центром.</string>
+    <string name="label_aa6b22c2d4" formatted="false">Сверху</string>
+    <string name="label_aaf3212651" formatted="false">Сайты-исключения</string>
+    <string name="label_adc8ad240f" formatted="false">Удалить из списка</string>
+    <string name="label_aeb17a3c87" formatted="false">Страницы</string>
+    <string name="label_af8ef203ba" formatted="false">Введите полный адрес сайта</string>
+    <string name="label_b0345f858b" formatted="false">Копия импортирована</string>
+    <string name="label_b1980f4b88" formatted="false">Не удалось сохранить копию</string>
+    <string name="label_b1e23e1ff0" formatted="false">Размер текста</string>
+    <string name="label_b1ffffa8ce" formatted="false">Не удалось установить защищённое соединение</string>
+    <string name="label_b2717fdac6" formatted="false">Не удалось открыть страницу</string>
+    <string name="label_b304e3922c" formatted="false">Отключить блокировку для сайта можно через значок щита в адресной строке</string>
+    <string name="label_b3697f4d85" formatted="false">1.2 МБ/с</string>
+    <string name="label_b5a0f1f8cb" formatted="false">Попробовать HTTP</string>
+    <string name="label_b6819e91ff" formatted="false">Загрузка…</string>
+    <string name="label_b6bb83bb8e" formatted="false">камере</string>
+    <string name="label_b6e3f0f010" formatted="false">Шрифт с засечками</string>
+    <string name="label_b9147aa121" formatted="false">включена</string>
+    <string name="label_b9c2dcd395" formatted="false">Запись видео из плеера</string>
+    <string name="label_b9c9ff652d" formatted="false">О приложении</string>
+    <string name="label_bbbf38509d" formatted="false">включён</string>
+    <string name="label_bf321a8152" formatted="false">Защищённое соединение</string>
+    <string name="label_c029581acc" formatted="false">Сделать браузером по умолчанию</string>
+    <string name="label_c0a8a5cc3c" formatted="false">Предлагать запросы при вводе</string>
+    <string name="label_c394f7f85f" formatted="false">ошибка</string>
+    <string name="label_c3e507c585" formatted="false">Поиск в истории</string>
+    <string name="label_c464388cf3" formatted="false">Поисковая система</string>
+    <string name="label_c6351aea1f" formatted="false">При HTTP соединение не защищено. Не вводите пароли и данные карты.</string>
+    <string name="label_c70571f4f1" formatted="false">Закладка удалена</string>
+    <string name="label_c7894c072c" formatted="false">Не удалось импортировать копию</string>
+    <string name="label_c79e6a9176" formatted="false">Отключение ускоряет страницы, но ломает многие сайты</string>
+    <string name="label_c8646543a0" formatted="false">Долгое нажатие на счётчик вкладок</string>
+    <string name="label_c9467860d8" formatted="false">Отключён</string>
+    <string name="label_ca351e4fa2" formatted="false">камере и микрофону</string>
+    <string name="label_cbe1969c24" formatted="false">Закрыть вкладку, новая вкладка, инкогнито</string>
+    <string name="label_cbfd27adec" formatted="false">Объединить видео и звук</string>
+    <string name="label_cce8a296b7" formatted="false">Скопированный текст</string>
+    <string name="label_ccfc74ba96" formatted="false">Добавить закладки и применить настройки из копии?</string>
+    <string name="label_cd5ce9bc86" formatted="false">Сохранённое</string>
+    <string name="label_cdbc1db869" formatted="false">Списки фильтров</string>
+    <string name="label_d11806aee2" formatted="false">Поделиться ссылкой</string>
+    <string name="label_d119d9fb73" formatted="false">Сайт требует имя пользователя и пароль</string>
+    <string name="label_d1584cb6e2" formatted="false">Уменьшить шрифт</string>
+    <string name="label_d19457bde2" formatted="false">Закрыть вкладку</string>
+    <string name="label_d1caf6841a" formatted="false">Больше места для страницы</string>
+    <string name="label_d1dd3bea02" formatted="false">Ссылка появится среди быстрых сайтов на стартовой странице.</string>
+    <string name="label_d426cfebd1" formatted="false">Удалить сохранённую статью?</string>
+    <string name="label_d5294ac6ae" formatted="false">микрофону</string>
+    <string name="label_d53210234e" formatted="false">Сертификат ещё не вступил в силу.</string>
+    <string name="label_d57bf49aeb" formatted="false">Загружен, включится после обновления</string>
+    <string name="label_d5874e5452" formatted="false">Запустите видео на странице, чтобы найти поток для просмотра или загрузки</string>
+    <string name="label_d82860a0f5" formatted="false">Откройте статью в режиме чтения и нажмите кнопку сохранения</string>
+    <string name="label_d8702293cc" formatted="false">Добавить сайт в быстрый доступ</string>
+    <string name="label_d875700a04" formatted="false">Продолжить загрузку</string>
+    <string name="label_d9233d66bf" formatted="false">Нажмите «Стоп» на кнопке записи, когда закончите.</string>
+    <string name="label_d9a2cd6cde" formatted="false">Очистить список загрузок?</string>
+    <string name="label_dc69c54f56" formatted="false">Записать видео из плеера</string>
+    <string name="label_dce3ab6dbb" formatted="false">Всплывающая реклама заблокирована</string>
+    <string name="label_dcf0bfb35e" formatted="false">Спрашивать</string>
+    <string name="label_e02613ca5d" formatted="false">Любой список в формате AdBlock Plus / uBlock / hosts</string>
+    <string name="label_e12dfc388b" formatted="false">Сертификат выдан для другого сайта.</string>
+    <string name="label_e25e7b065c" formatted="false">Незащищённое соединение</string>
+    <string name="label_e4dd681cb3" formatted="false">Скрывать панель при прокрутке</string>
+    <string name="label_e53ac4dcf6" formatted="false">Мешает отслеживанию между сайтами</string>
+    <string name="label_e7c4f50072" formatted="false">Лёгкий и быстрый браузер без рекламы</string>
+    <string name="label_eb51083cdc" formatted="false">Переключение между вкладками</string>
+    <string name="label_eb8d47c8ed" formatted="false">Свайп по адресной строке влево/вправо</string>
+    <string name="label_ec102be15f" formatted="false">Браузер не сохранит историю посещений и вкладки. На этой версии Android cookie общие с обычными вкладками.</string>
+    <string name="label_eee2285ba1" formatted="false">Основные</string>
+    <string name="label_f108c515df" formatted="false">Нужно разрешение на запись файлов</string>
+    <string name="label_f130957cec" formatted="false">Свайп карточки вкладки в сторону</string>
+    <string name="label_f2a32462a8" formatted="false">Голосовой поиск недоступен</string>
+    <string name="label_f2cea57d22" formatted="false">Открыть HTTP</string>
+    <string name="label_f32702d79a" formatted="false">Очистить список</string>
+    <string name="label_f4e996a084" formatted="false">Настройки сайта сброшены</string>
+    <string name="label_f4fb666b93" formatted="false">Лаунчер не поддерживает ярлыки</string>
+    <string name="label_f6dab074d7" formatted="false">Назад</string>
+    <string name="label_f72ae77771" formatted="false">Свои правила</string>
+    <string name="label_fa1881309a" formatted="false">Снизу</string>
+    <string name="label_fde6f6b188" formatted="false">Свой поисковик</string>
+    <string name="label_fe14840cb4" formatted="false">Открыть список вкладок</string>
+    <string name="label_fe8f79f29d" formatted="false">Скачать</string>
+    <string name="label_ff29c197a8" formatted="false">вашему местоположению</string>
 </resources>

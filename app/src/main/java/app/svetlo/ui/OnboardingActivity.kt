@@ -54,7 +54,7 @@ class OnboardingActivity : Activity() {
         }
         header(body)
 
-        section(body, "Поисковая система")
+        section(body, getString(app.svetlo.R.string.label_c464388cf3))
         val group = RadioGroup(this).apply {
             background = getDrawable(R.drawable.bg_card)
             setPadding(dp(8), dp(4), dp(8), dp(4))
@@ -73,9 +73,9 @@ class OnboardingActivity : Activity() {
         }
         body.addView(group, LinearLayout.LayoutParams(MATCH, WRAP))
 
-        section(body, "Адресная строка")
+        section(body, getString(app.svetlo.R.string.label_a25f3cd79e))
         val cards = LinearLayout(this)
-        listOf(false to "Сверху", true to "Снизу").forEachIndexed { i, (bottom, label) ->
+        listOf(false to getString(app.svetlo.R.string.label_aa6b22c2d4), true to getString(app.svetlo.R.string.label_fa1881309a)).forEachIndexed { i, (bottom, label) ->
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -101,21 +101,21 @@ class OnboardingActivity : Activity() {
         body.addView(cards, LinearLayout.LayoutParams(MATCH, WRAP))
         updateBarCards()
 
-        section(body, "Основное")
+        section(body, getString(app.svetlo.R.string.label_127492c294))
         val toggles = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = getDrawable(R.drawable.bg_card)
             setPadding(0, dp(4), 0, dp(4))
         }
-        toggle(toggles, "Блокировка рекламы", "Страницы грузятся быстрее и без трекеров", Prefs.adblock) { Prefs.adblock = it }
-        toggle(toggles, "Скрывать панель при прокрутке", "Больше места для страницы", Prefs.autoHideBar) { Prefs.autoHideBar = it }
+        toggle(toggles, getString(app.svetlo.R.string.label_7f2be1ba3d), getString(app.svetlo.R.string.label_18e40f59bd), Prefs.adblock) { Prefs.adblock = it }
+        toggle(toggles, getString(app.svetlo.R.string.label_e4dd681cb3), getString(app.svetlo.R.string.label_d1caf6841a), Prefs.autoHideBar) { Prefs.autoHideBar = it }
         if (Build.VERSION.SDK_INT >= 29) {
-            toggle(toggles, "Тёмная тема для сайтов", "Затемнять сайты в тёмном режиме системы", Prefs.darkPages) { Prefs.darkPages = it }
+            toggle(toggles, getString(app.svetlo.R.string.label_5c036faae2), getString(app.svetlo.R.string.label_272eec4fdb), Prefs.darkPages) { Prefs.darkPages = it }
         }
         body.addView(toggles, LinearLayout.LayoutParams(MATCH, WRAP))
 
         defaultBtn = TextView(this).apply {
-            text = "Сделать браузером по умолчанию"
+            text = getString(app.svetlo.R.string.label_c029581acc)
             textSize = 15f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
@@ -128,7 +128,7 @@ class OnboardingActivity : Activity() {
         body.addView(defaultBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(20) })
 
         val start = TextView(this).apply {
-            text = "Начать"
+            text = getString(app.svetlo.R.string.label_14eaa871df)
             textSize = 16f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
@@ -181,7 +181,7 @@ class OnboardingActivity : Activity() {
             setPadding(0, dp(12), 0, 0)
         }, LinearLayout.LayoutParams(MATCH, WRAP))
         body.addView(TextView(this).apply {
-            text = "Лёгкий и быстрый браузер без рекламы"
+            text = getString(app.svetlo.R.string.label_e7c4f50072)
             textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(color(R.color.c_text2))

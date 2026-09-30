@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class TestServer : Closeable {
     private val server = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
+    val receivedHeaders = ConcurrentHashMap<String, Map<String, String>>()
+    val redirects = ConcurrentHashMap<String, String>()
     val routes = ConcurrentHashMap<String, ByteArray>()
     val delays = ConcurrentHashMap<String, Long>()
     val requests = ConcurrentHashMap<String, AtomicInteger>()
@@ -33,11 +35,14 @@ class TestServer : Closeable {
         val reader = it.getInputStream().bufferedReader()
         val path = reader.readLine().split(' ')[1].substringBefore('?')
         var range: String? = null
+        val headers = HashMap<String, String>()
         while (true) {
             val h = reader.readLine().orEmpty()
             if (h.isEmpty()) break
+            headers[h.substringBefore(':').lowercase()] = h.substringAfter(':').trim()
             if (h.startsWith("Range:", ignoreCase = true)) range = h.substringAfter(':').trim().removePrefix("bytes=")
         }
+        receivedHeaders[path] = headers
         requests.getOrPut(path) { AtomicInteger() }.incrementAndGet()
         maxActive.accumulateAndGet(active.incrementAndGet(), ::maxOf)
         try {
@@ -47,7 +52,8 @@ class TestServer : Closeable {
         }
         val body = routes[path]
         val out = it.getOutputStream()
-        if (body == null) out.write("HTTP/1.0 404 Not Found\r\nContent-Length: 0\r\n\r\n".toByteArray())
+        if (redirects.containsKey(path)) out.write("HTTP/1.0 302 Found\r\nLocation: ${redirects[path]}\r\nContent-Length: 0\r\n\r\n".toByteArray())
+        else if (body == null) out.write("HTTP/1.0 404 Not Found\r\nContent-Length: 0\r\n\r\n".toByteArray())
         else if (range != null) {
             val from = range.substringBefore('-').toInt()
             val to = range.substringAfter('-').toInt()

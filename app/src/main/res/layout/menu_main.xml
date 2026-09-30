@@ -69,6 +69,7 @@
     </LinearLayout>
 
     <TextView android:id="@+id/mAdblock" style="@style/MenuItem" android:drawableStart="@drawable/ic_shield" android:text="@string/adblock" />
+    <TextView android:id="@+id/mReadingList" style="@style/MenuItem" android:drawableStart="@drawable/ic_reader" android:text="@string/reading_list" />
     <TextView android:id="@+id/mSettings" style="@style/MenuItem" android:drawableStart="@drawable/ic_settings" android:text="@string/settings" />
 </LinearLayout>
 </ScrollView>

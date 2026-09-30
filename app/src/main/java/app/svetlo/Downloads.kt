@@ -300,6 +300,7 @@ object Downloads {
         DownloadStatus.DONE -> listOfNotNull("Готово", e.total.takeIf { it > 0 }?.let(::formatSize), formatWhen(e.createdAt, now)).joinToString(" · ")
         DownloadStatus.FAILED -> if (e.message.isNullOrBlank()) "Ошибка загрузки" else "Ошибка: ${e.message}"
         DownloadStatus.CANCELLED -> "Отменено"
+        DownloadStatus.PAUSED -> "Приостановлено · ${formatSize(e.bytes)}"
     }
 
     /** Percent for the progress bar, or null when the size is unknown (indeterminate). */

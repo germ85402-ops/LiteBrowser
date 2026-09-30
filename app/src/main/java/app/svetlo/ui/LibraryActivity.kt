@@ -30,6 +30,10 @@ class LibraryActivity : Activity() {
     private lateinit var search: EditText
     private lateinit var empty: TextView
     private val adapter = Adapter()
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private var generation = 0
+    private var pendingLoad: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +48,7 @@ class LibraryActivity : Activity() {
         }
         bar.addView(iconButton(this, R.drawable.ic_arrow_back, getString(R.string.back)) { finish() })
         search = EditText(this).apply {
-            hint = if (bookmarks) "Поиск в закладках" else "Поиск в истории"
+            hint = if (bookmarks) getString(app.svetlo.R.string.label_604832779d) else getString(app.svetlo.R.string.label_c3e507c585)
             setBackgroundResource(R.drawable.bg_omnibox)
             setPadding(dp(16), 0, dp(16), 0)
             textSize = 15f
@@ -53,7 +57,7 @@ class LibraryActivity : Activity() {
             if (android.os.Build.VERSION.SDK_INT >= 26) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         }
         bar.addView(search, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
-        if (!bookmarks) bar.addView(iconButton(this, R.drawable.ic_delete, "Очистить историю") { confirmClear() })
+        if (!bookmarks) bar.addView(iconButton(this, R.drawable.ic_delete, getString(app.svetlo.R.string.label_8ead3cd747)) { confirmClear() })
         root.addView(bar, ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
 
         val frame = android.widget.FrameLayout(this)
@@ -81,9 +85,28 @@ class LibraryActivity : Activity() {
 
     private fun load() {
         val q = search.text.toString().trim()
-        items = if (bookmarks) BrowserDb.bookmarks(q) else BrowserDb.history(q)
-        adapter.notifyDataSetChanged()
-        empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        val request = ++generation
+        pendingLoad?.let(main::removeCallbacks)
+        val task = Runnable {
+            io.execute {
+                val result = runCatching { if (bookmarks) BrowserDb.bookmarks(q) else BrowserDb.history(q) }.getOrDefault(emptyList())
+                main.post {
+                    if (request != generation || isDestroyed) return@post
+                    items = result
+                    adapter.notifyDataSetChanged()
+                    empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+                }
+            }
+        }
+        pendingLoad = task
+        main.postDelayed(task, if (q.isEmpty()) 0 else 120)
+    }
+
+    override fun onDestroy() {
+        generation++
+        pendingLoad?.let(main::removeCallbacks)
+        io.shutdownNow()
+        super.onDestroy()
     }
 
     private fun open(url: String, newTab: Boolean) {
@@ -93,7 +116,7 @@ class LibraryActivity : Activity() {
 
     private fun options(e: Entry) {
         AlertDialog.Builder(this).setTitle(e.title.ifBlank { e.url })
-            .setItems(arrayOf("Открыть в новой вкладке", "Копировать ссылку", "Удалить")) { _, i ->
+            .setItems(arrayOf(getString(app.svetlo.R.string.label_97acdc2609), getString(app.svetlo.R.string.label_69d7d7248a), getString(app.svetlo.R.string.label_86ea33aef5))) { _, i ->
                 when (i) {
                     0 -> open(e.url, true)
                     1 -> getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("url", e.url))
@@ -107,14 +130,14 @@ class LibraryActivity : Activity() {
     }
 
     private fun confirmClear() {
-        AlertDialog.Builder(this).setTitle("Очистить всю историю?")
-            .setPositiveButton("Очистить") { _, _ ->
+        AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_0243318ec9))
+            .setPositiveButton(getString(app.svetlo.R.string.label_98b2073ed1)) { _, _ ->
                 BrowserDb.clearHistory()
                 items = emptyList()
                 adapter.notifyDataSetChanged()
                 empty.visibility = View.VISIBLE
             }
-            .setNegativeButton("Отмена", null).show()
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
     }
 
     private inner class Adapter : BaseAdapter() {

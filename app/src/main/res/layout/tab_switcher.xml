@@ -48,6 +48,8 @@
                 android:src="@drawable/ic_delete" />
         </LinearLayout>
 
+        <EditText android:id="@+id/tsSearch" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginHorizontal="12dp" android:singleLine="true" android:inputType="text" android:hint="@string/tab_search" android:textColor="@color/c_text" android:background="@drawable/bg_omnibox" android:paddingHorizontal="16dp" android:importantForAutofill="no" />
+
         <GridView
             android:id="@+id/tsGrid"
             android:layout_width="match_parent"

@@ -33,7 +33,7 @@ object AdBlock {
         totalBlocked.set(Prefs.sp.getLong("blocked_total", 0))
         whitelist.addAll(Prefs.sp.getStringSet("whitelist", emptySet())!!)
         rebuild()
-        if (FilterLists.needsUpdate(app)) update(force = false)
+        if (!Prefs.isPrivate && FilterLists.needsUpdate(app)) update(force = false)
     }
 
     fun saveStats() = Prefs.sp.edit().putLong("blocked_total", totalBlocked.get()).apply()
@@ -69,7 +69,7 @@ object AdBlock {
     private fun active(pageHost: String?): Boolean {
         if (!Prefs.adblock || isWhitelisted(pageHost)) return false
         // The first page load after start may race the initial engine build.
-        if (ready.count > 0) ready.await(3, TimeUnit.SECONDS)
+        if (ready.count > 0 && Looper.myLooper() != Looper.getMainLooper()) ready.await(3, TimeUnit.SECONDS)
         return true
     }
 
@@ -129,10 +129,10 @@ object AdBlock {
     /** YouTube serves ads from its own video hosts, so they are skipped client-side instead of blocked. */
     private const val YOUTUBE_JS = """(function(){if(window.__lbyt)return;window.__lbyt=1;
 var st=document.createElement('style');st.textContent='ytm-promoted-sparkles-web-renderer,ytm-promoted-video-renderer,ytm-companion-ad-renderer,ad-slot-renderer,ytm-ad-slot-renderer,ytd-ad-slot-renderer,ytd-in-feed-ad-layout-renderer,ytd-banner-promo-renderer,ytd-promoted-sparkles-web-renderer,ytm-paid-content-overlay-renderer,.ytp-ad-overlay-container,#player-ads,#masthead-ad,ytm-statement-banner-renderer{display:none!important}';
-(document.head||document.documentElement).appendChild(st);var ad=false;
+(document.head||document.documentElement).appendChild(st);var ad=false,wasMuted=false,wasRate=1;
 setInterval(function(){var p=document.querySelector('.ad-showing,.ad-interrupting');var v=document.querySelector('video');
 var b=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytm-skip-ad-button,.ytp-ad-skip-button-slot button');
 if(b)b.click();
-if(p&&v){ad=true;v.muted=true;v.playbackRate=16;if(isFinite(v.duration)&&v.duration>0&&v.currentTime<v.duration-0.1)v.currentTime=v.duration-0.1;}
-else if(ad&&v){ad=false;v.muted=false;v.playbackRate=1;}},300);})();"""
+if(p&&v){if(!ad){wasMuted=v.muted;wasRate=v.playbackRate}ad=true;v.muted=true;v.playbackRate=16;if(isFinite(v.duration)&&v.duration>0&&v.currentTime<v.duration-0.1)v.currentTime=v.duration-0.1;}
+else if(ad&&v){ad=false;v.muted=wasMuted;v.playbackRate=wasRate;}},300);})();"""
 }

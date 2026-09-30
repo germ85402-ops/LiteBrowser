@@ -57,6 +57,7 @@ object FilterLists {
     fun userRulesFile(ctx: Context) = File(ctx.filesDir, "user_rules.txt")
 
     fun buildEngine(ctx: Context): FilterEngine {
+        FilterEngine.loadPublicSuffix(ctx.assets.open("public_suffix_list.dat").bufferedReader().use { it.readText() })
         val e = FilterEngine()
         val edit = Prefs.sp.edit()
         for (s in all()) {
@@ -100,7 +101,17 @@ object FilterLists {
         conn.setRequestProperty("User-Agent", "Svetlo/1.0")
         try {
             require(conn.responseCode == 200) { "HTTP ${conn.responseCode}" }
-            val text = conn.inputStream.bufferedReader().use { it.readText() }
+            val text = conn.inputStream.bufferedReader().use { reader ->
+                val out = StringBuilder()
+                val buffer = CharArray(8192)
+                while (true) {
+                    val n = reader.read(buffer)
+                    if (n < 0) break
+                    require(out.length + n <= 12 * 1024 * 1024) { "filter list too large" }
+                    out.append(buffer, 0, n)
+                }
+                out.toString()
+            }
             require(text.lineSequence().count() > 20 && !text.trimStart().startsWith("<")) { "not a filter list" }
             val f = file(ctx, s)
             val tmp = File(f.parentFile, f.name + ".tmp")

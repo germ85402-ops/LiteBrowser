@@ -25,6 +25,8 @@ import javax.crypto.spec.SecretKeySpec
 class HlsDownloader(
     private val headers: Map<String, String>,
     private val parallelism: Int = 4,
+    private val credentialOrigin: String? = headers["X-Svetlo-Origin"],
+    private val isPaused: () -> Boolean = { false },
     private val isCancelled: () -> Boolean,
 ) {
     class Key(val url: String, val iv: ByteArray?)
@@ -122,7 +124,7 @@ class HlsDownloader(
         val pool = Executors.newFixedThreadPool(threads) { r -> Thread(r, "hls-fetch").apply { isDaemon = true } }
         val keys = ConcurrentHashMap<String, ByteArray>()
         val futures = arrayOfNulls<Future<ByteArray>>(parts.size)
-        val window = threads * 2
+        val window = threads
         var submitted = 0
         var bytes = 0L
         try {
@@ -167,6 +169,10 @@ class HlsDownloader(
     }
 
     private fun checkCancelled() {
+        while (isPaused()) {
+            if (isCancelled() || Thread.currentThread().isInterrupted) throw InterruptedException("cancelled")
+            Thread.sleep(100)
+        }
         if (isCancelled() || Thread.currentThread().isInterrupted) throw InterruptedException("cancelled")
     }
 
@@ -175,11 +181,7 @@ class HlsDownloader(
     /** Total size via a 1-byte Range probe; -1 when unknown or the server ignores ranges. */
     internal fun contentLength(url: String): Long = runCatching {
         checkCancelled()
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15000
-        conn.readTimeout = 30000
-        headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
-        conn.setRequestProperty("Range", "bytes=0-0")
+        val conn = connection(url, "bytes=0-0")
         try {
             if (conn.responseCode != 206) -1L
             else conn.getHeaderField("Content-Range")?.substringAfter('/')?.trim()?.toLongOrNull() ?: -1L
@@ -213,11 +215,8 @@ class HlsDownloader(
 
     private fun fetch(url: String, offset: Long = -1, length: Long = -1): ByteArray {
         checkCancelled()
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15000
-        conn.readTimeout = 30000
-        headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
-        if (length >= 0) conn.setRequestProperty("Range", "bytes=$offset-${offset + length - 1}")
+        require(length <= MAX_RESPONSE_BYTES) { "Фрагмент слишком большой" }
+        val conn = connection(url, if (length >= 0) "bytes=$offset-${offset + length - 1}" else null)
         try {
             val code = conn.responseCode
             if (code !in 200..299) throw HttpException(code)
@@ -227,15 +226,21 @@ class HlsDownloader(
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
+                    if (out.size().toLong() + n > MAX_RESPONSE_BYTES) throw IOException("Ответ сервера превышает лимит 16 МБ")
                     out.write(buf, 0, n)
                     checkCancelled()
                 }
                 out.toByteArray()
             }
             // Server ignored Range and sent the whole resource.
-            if (length >= 0 && code == 200 && body.size > length) {
+            if (length >= 0 && code == 200) {
                 if (offset + length > body.size) throw IOException("Неполный ответ сервера")
                 return body.copyOfRange(offset.toInt(), (offset + length).toInt())
+            }
+            if (code == 206 && length >= 0) {
+                val range = conn.getHeaderField("Content-Range").orEmpty()
+                require(range.startsWith("bytes $offset-")) { "Неверный диапазон ответа" }
+                if (body.size.toLong() != length) throw IOException("Неполный ответ сервера")
             }
             return body
         } finally {
@@ -243,9 +248,39 @@ class HlsDownloader(
         }
     }
 
+    /** Redirects are explicit so a server cannot forward another origin's credentials. */
+    private fun connection(url: String, range: String?): HttpURLConnection {
+        var current = URL(url)
+        require(current.protocol == "http" || current.protocol == "https") { "Неподдерживаемый адрес потока" }
+        repeat(6) {
+            checkCancelled()
+            val conn = current.openConnection() as HttpURLConnection
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = 15000
+            conn.readTimeout = 30000
+            headers.forEach { (k, v) ->
+                if (!k.equals("X-Svetlo-Origin", true) &&
+                    (!(k.equals("Cookie", true) || k.equals("Authorization", true)) || credentialOrigin != null && Origin.same(credentialOrigin, current.toString())) &&
+                    !(k.equals("Referer", true) && v.startsWith("https:") && current.protocol == "http")) conn.setRequestProperty(k, v)
+            }
+            range?.let { conn.setRequestProperty("Range", it) }
+            val code = try { conn.responseCode } catch (e: Exception) { conn.disconnect(); throw e }
+            if (code !in listOf(301, 302, 303, 307, 308)) return conn
+            val location = conn.getHeaderField("Location")
+            conn.disconnect()
+            if (location == null) throw IOException("Пустая переадресация")
+            val next = URL(current, location)
+            require(next.protocol == "http" || next.protocol == "https") { "Неподдерживаемая переадресация" }
+            if (current.protocol == "https" && next.protocol != "https") throw IOException("Небезопасная переадресация HTTPS → HTTP")
+            current = next
+        }
+        throw IOException("Слишком много переадресаций")
+    }
+
     class HttpException(val code: Int) : IOException("HTTP $code")
 
     companion object {
+        internal const val MAX_RESPONSE_BYTES = 16L * 1024 * 1024
         private fun isMaster(text: String) = text.contains("#EXT-X-STREAM-INF")
 
         internal fun attr(line: String, name: String): String? =
@@ -316,6 +351,7 @@ class HlsDownloader(
         }
 
         internal fun parseMedia(base: String, text: String): Playlist {
+            require(text.lineSequence().any { it.trim() == "#EXT-X-ENDLIST" } || !text.contains("#EXT-X-TARGETDURATION")) { "Это прямая трансляция (HLS live) — скачать её нельзя" }
             val baseUrl = URL(base)
             var seq = 0L
             var key: Key? = null

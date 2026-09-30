@@ -62,7 +62,14 @@ jobs:
           if [ -z "$KEYSTORE_BASE64" ] || [ -z "$SVETLO_STORE_PASSWORD" ] || [ -z "$SVETLO_KEY_ALIAS" ] || [ -z "$SVETLO_KEY_PASSWORD" ]; then
             echo "::error::Release signing secrets are missing. Run scripts/create-release-key.sh (see docs/RELEASE.md)."; exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          # Re-encode PKCS12 with algorithms readable by JDK 17, preserving key and certificate.
+          # Some newer OpenSSL exports use PBES2 parameters that Java's reader rejects.
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/release-source.p12" "$RUNNER_TEMP/release-compatible.p12" "$RUNNER_TEMP/release.pem"' EXIT
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release-source.p12"
+          openssl pkcs12 -in "$RUNNER_TEMP/release-source.p12" -passin env:SVETLO_STORE_PASSWORD -out "$RUNNER_TEMP/release.pem" -nodes
+          openssl pkcs12 -export -in "$RUNNER_TEMP/release.pem" -out "$RUNNER_TEMP/release-compatible.p12" -passout env:SVETLO_STORE_PASSWORD -name "$SVETLO_KEY_ALIAS" -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
+          keytool -importkeystore -srckeystore "$RUNNER_TEMP/release-compatible.p12" -srcstoretype PKCS12 -srcstorepass:env SVETLO_STORE_PASSWORD -srcalias "$SVETLO_KEY_ALIAS" -destkeystore "$RUNNER_TEMP/release.jks" -deststoretype JKS -deststorepass:env SVETLO_STORE_PASSWORD -destkeypass:env SVETLO_KEY_PASSWORD -destalias "$SVETLO_KEY_ALIAS" -noprompt
           echo "SVETLO_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
       - name: Test and build

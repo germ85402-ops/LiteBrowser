@@ -40,6 +40,8 @@ class TabSwitcher(
 ) {
     private val grid = root.findViewById<GridView>(R.id.tsGrid)
     private val title = root.findViewById<TextView>(R.id.tsTitle)
+    private var query = ""
+    private val visibleTabs get() = tabs.filter { query.isBlank() || it.title.contains(query, true) || it.url.contains(query, true) }
     private val adapter = Adapter()
     private var hiddenTab: Tab? = null
     private var anim: ValueAnimator? = null
@@ -48,12 +50,18 @@ class TabSwitcher(
 
     init {
         grid.adapter = adapter
+        grid.numColumns = (act.resources.configuration.screenWidthDp / 220).coerceIn(2, 5)
+        root.findViewById<android.widget.EditText>(R.id.tsSearch).addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: android.text.Editable?) { query = s.toString(); adapter.notifyDataSetChanged() }
+        })
         root.findViewById<View>(R.id.tsBack).setOnClickListener { close() }
         root.findViewById<View>(R.id.tsNew).setOnClickListener { onNew() }
         root.findViewById<View>(R.id.tsCloseAll).setOnClickListener { onCloseAll() }
         root.findViewById<ImageButton>(R.id.tsMode).apply {
             setImageResource(if (incognito) R.drawable.ic_tab_square else R.drawable.ic_incognito)
-            contentDescription = if (incognito) "Обычные вкладки" else "Новая вкладка инкогнито"
+            contentDescription = if (incognito) act.getString(app.svetlo.R.string.label_1fcbde02de) else act.getString(app.svetlo.R.string.label_86b552e23a)
             setOnClickListener { onToggleMode() }
         }
     }
@@ -62,7 +70,7 @@ class TabSwitcher(
         if (isShown) return
         refresh()
         val cur = current()
-        val pos = tabs.indexOf(cur).coerceAtLeast(0)
+        val pos = visibleTabs.indexOf(cur).coerceAtLeast(0)
         root.visibility = View.VISIBLE
         root.alpha = 0f
         val fadeIn = act.motionDuration(200)
@@ -90,7 +98,7 @@ class TabSwitcher(
     fun close(tab: Tab? = current()) {
         if (!isShown) return
         if (tab == null) { hide(); return }
-        val from = thumbRect(tabs.indexOf(tab))
+        val from = thumbRect(visibleTabs.indexOf(tab))
         onSelect(tab)
         val bmp = tab.thumbnail
         if (from == null || bmp == null) { hide(); return }
@@ -111,6 +119,7 @@ class TabSwitcher(
     }
 
     fun refresh() {
+        grid.numColumns = (act.resources.configuration.screenWidthDp / 220).coerceIn(2, 5)
         title.text = if (incognito) act.resources.getQuantityString(R.plurals.incognito_tabs_count, tabs.size, tabs.size)
         else act.resources.getQuantityString(R.plurals.tabs_count, tabs.size, tabs.size)
         adapter.notifyDataSetChanged()
@@ -204,13 +213,13 @@ class TabSwitcher(
     }
 
     private inner class Adapter : BaseAdapter() {
-        override fun getCount() = tabs.size
-        override fun getItem(position: Int) = tabs[position]
-        override fun getItemId(position: Int) = System.identityHashCode(tabs[position]).toLong()
+        override fun getCount() = visibleTabs.size
+        override fun getItem(position: Int) = visibleTabs[position]
+        override fun getItemId(position: Int) = System.identityHashCode(visibleTabs[position]).toLong()
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val v = convertView ?: act.layoutInflater.inflate(R.layout.item_tab, parent, false).apply { clipToOutline = true }
-            val tab = tabs[position]
+            val tab = visibleTabs[position]
             v.animate().cancel()
             v.translationX = 0f
             v.alpha = 1f

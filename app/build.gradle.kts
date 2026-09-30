@@ -11,8 +11,8 @@ android {
         applicationId = "app.svetlo.browser"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.3.0-rc3"
+        versionCode = 6
+        versionName = "0.4.0-rc1"
     }
 
     // Release key comes from the environment (CI secrets or a local shell); see docs/RELEASE.md.
@@ -65,6 +65,11 @@ tasks.withType<Test>().configureEach {
     // Robolectric tests download a large Android runtime; run them only on request (-Pscreenshots).
     val screenshots = project.findProperty("screenshots")?.toString() ?: "false"
     systemProperty("screenshots", screenshots)
+    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    project.findProperty("robolectricOfflineDir")?.let {
+        systemProperty("robolectric.offline", "true")
+        systemProperty("robolectric.dependency.dir", it.toString())
+    }
     if (screenshots == "false") {
         filter.excludeTestsMatching("*ScreenshotTest")
         filter.excludeTestsMatching("*RobolectricTest")

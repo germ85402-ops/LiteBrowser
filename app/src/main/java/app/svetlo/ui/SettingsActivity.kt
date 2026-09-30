@@ -16,74 +16,119 @@ import app.svetlo.data.SearchEngine
 import app.svetlo.filter.AdBlock
 import java.io.File
 
-class SettingsActivity : Activity() {
+open class SettingsActivity : Activity() {
     private lateinit var page: Page
     private var adblockRow: Page.Row? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        page = Page(this, "Настройки")
+        page = Page(this, getString(app.svetlo.R.string.label_7f17c7c62a))
         setResult(RESULT_OK)
 
-        page.header("Основные")
-        page.row("Поисковая система", Prefs.searchEngine.title) { row ->
+        page.header(getString(app.svetlo.R.string.label_eee2285ba1))
+        page.row(getString(app.svetlo.R.string.label_c464388cf3), Prefs.searchEngine.title) { row ->
             val engines = SearchEngine.entries
-            AlertDialog.Builder(this).setTitle("Поисковая система")
+            AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_c464388cf3))
                 .setSingleChoiceItems(engines.map { it.title }.toTypedArray(), engines.indexOf(Prefs.searchEngine)) { d, i ->
                     Prefs.searchEngine = engines[i]
+                    Prefs.customSearch = ""
                     row.setSummary(engines[i].title)
                     d.dismiss()
                 }.show()
         }
-        page.switchRow("Поисковые подсказки", "Предлагать запросы при вводе", Prefs.suggestions) { Prefs.suggestions = it }
-        page.switchRow("Адресная строка внизу", "Удобнее для работы одной рукой", Prefs.bottomBar) { Prefs.bottomBar = it }
-        page.switchRow("Скрывать панель при прокрутке", "Больше места для страницы", Prefs.autoHideBar) { Prefs.autoHideBar = it }
-        page.switchRow("Потянуть вниз для обновления", "Обновить страницу жестом сверху", Prefs.pullToRefresh) { Prefs.pullToRefresh = it }
+        page.row(getString(app.svetlo.R.string.custom_search), Prefs.customSearch.ifBlank { getString(app.svetlo.R.string.label_7e967753a7) }) { row ->
+            val field = android.widget.EditText(this).apply { setText(Prefs.customSearch); hint = "https://example.com/search?q=%s"; isSingleLine = true }
+            val dialog = AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_fde6f6b188)).setView(field).setPositiveButton(getString(app.svetlo.R.string.label_4864057d62), null).setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).create()
+            dialog.setOnShowListener { dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = field.text.toString().trim()
+                if (value.isNotEmpty() && !Prefs.validCustomSearch(value)) field.error = getString(app.svetlo.R.string.label_07ab1b9acb)
+                else { Prefs.customSearch = value; row.setSummary(value.ifBlank { getString(app.svetlo.R.string.label_c9467860d8) }); dialog.dismiss() }
+            } }
+            dialog.show()
+        }
+        page.switchRow(getString(app.svetlo.R.string.label_9ae3022506), getString(app.svetlo.R.string.label_c0a8a5cc3c), Prefs.suggestions) { Prefs.suggestions = it }
+        page.switchRow(getString(app.svetlo.R.string.label_a895c38d59), getString(app.svetlo.R.string.label_891cbb5363), Prefs.bottomBar) { Prefs.bottomBar = it }
+        page.switchRow(getString(app.svetlo.R.string.label_e4dd681cb3), getString(app.svetlo.R.string.label_d1caf6841a), Prefs.autoHideBar) { Prefs.autoHideBar = it }
+        page.switchRow(getString(app.svetlo.R.string.label_60cadd7396), getString(app.svetlo.R.string.label_252b8b6ea8), Prefs.pullToRefresh) { Prefs.pullToRefresh = it }
 
-        page.header("Жесты")
-        page.row("Свайп по адресной строке влево/вправо", "Переключение между вкладками")
-        page.row("Свайп вниз по адресной строке", "Открыть список вкладок")
-        page.row("Свайп карточки вкладки в сторону", "Закрыть вкладку")
-        page.row("Долгое нажатие на счётчик вкладок", "Закрыть вкладку, новая вкладка, инкогнито")
+        page.header(getString(app.svetlo.R.string.label_9827140f7c))
+        page.row(getString(app.svetlo.R.string.label_eb8d47c8ed), getString(app.svetlo.R.string.label_eb51083cdc))
+        page.row(getString(app.svetlo.R.string.label_4d9fd9a9b3), getString(app.svetlo.R.string.label_fe14840cb4))
+        page.row(getString(app.svetlo.R.string.label_f130957cec), getString(app.svetlo.R.string.label_d19457bde2))
+        page.row(getString(app.svetlo.R.string.label_c8646543a0), getString(app.svetlo.R.string.label_cbe1969c24))
 
-        page.header("Блокировка рекламы")
-        adblockRow = page.row("Блокировка рекламы и трекеров", null) {
-            startActivity(Intent(this, AdblockActivity::class.java))
+        page.header(getString(app.svetlo.R.string.label_7f2be1ba3d))
+        adblockRow = page.row(getString(app.svetlo.R.string.label_356dbd9a03), null) {
+            startActivity(Intent(this, if (Prefs.isPrivate) IncognitoAdblockActivity::class.java else AdblockActivity::class.java))
         }
 
-        page.header("Страницы")
+        page.header(getString(app.svetlo.R.string.label_aeb17a3c87))
         if (Build.VERSION.SDK_INT >= 29) {
-            page.switchRow("Тёмная тема для сайтов", "Затемнять сайты в тёмном режиме системы", Prefs.darkPages) { Prefs.darkPages = it }
+            page.switchRow(getString(app.svetlo.R.string.label_5c036faae2), getString(app.svetlo.R.string.label_272eec4fdb), Prefs.darkPages) { Prefs.darkPages = it }
         }
-        page.row("Размер текста", "${Prefs.textZoom}%") { row ->
+        page.row(getString(app.svetlo.R.string.label_b1e23e1ff0), "${Prefs.textZoom}%") { row ->
             val values = listOf(80, 90, 100, 110, 125, 150, 175)
-            AlertDialog.Builder(this).setTitle("Размер текста")
+            AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_b1e23e1ff0))
                 .setSingleChoiceItems(values.map { "$it%" }.toTypedArray(), values.indexOf(Prefs.textZoom)) { d, i ->
                     Prefs.textZoom = values[i]
                     row.setSummary("${values[i]}%")
                     d.dismiss()
                 }.show()
         }
-        page.switchRow("JavaScript", "Отключение ускоряет страницы, но ломает многие сайты", Prefs.javascript) { Prefs.javascript = it }
+        page.switchRow("JavaScript", getString(app.svetlo.R.string.label_c79e6a9176), Prefs.javascript) { Prefs.javascript = it }
 
-        page.header("Конфиденциальность")
-        page.switchRow("Блокировать сторонние cookie", "Мешает отслеживанию между сайтами", Prefs.blockThirdPartyCookies) {
+        page.header(getString(app.svetlo.R.string.label_71c599386d))
+        page.switchRow(getString(app.svetlo.R.string.label_87079b51d2), getString(app.svetlo.R.string.label_e53ac4dcf6), Prefs.blockThirdPartyCookies) {
             Prefs.blockThirdPartyCookies = it
         }
-        page.row("Очистить историю") {
-            confirm("Очистить историю посещений?") { BrowserDb.clearHistory(); toast("История очищена") }
+        page.row(getString(app.svetlo.R.string.label_8ead3cd747)) {
+            confirm(getString(app.svetlo.R.string.label_72c81bea7a)) { BrowserDb.clearHistory(); toast(getString(app.svetlo.R.string.label_051ea779d1)) }
         }
-        page.row("Очистить кэш и cookie", "Выйдет из аккаунтов на сайтах") {
-            confirm("Удалить кэш, cookie и данные сайтов?") {
+        page.row(getString(app.svetlo.R.string.label_19c4595aba), getString(app.svetlo.R.string.label_a29296ac2c)) {
+            confirm(getString(app.svetlo.R.string.label_5acaa694fe)) {
                 WebView(this).apply { clearCache(true); destroy() }
                 CookieManager.getInstance().removeAllCookies(null)
                 WebStorage.getInstance().deleteAllData()
-                toast("Данные сайтов удалены")
+                toast(getString(app.svetlo.R.string.label_206a34de6a))
             }
         }
 
-        page.header("О приложении")
+        page.header(getString(app.svetlo.R.string.label_cd5ce9bc86))
+        page.row(getString(app.svetlo.R.string.reading_list)) { startActivity(Intent(this, ReadingListActivity::class.java)) }
+        page.row(getString(app.svetlo.R.string.backup_export)) {
+            startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/json").putExtra(Intent.EXTRA_TITLE, "Svetlo-backup.json"), 40)
+        }
+        page.row(getString(app.svetlo.R.string.backup_import)) {
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), 41)
+        }
+        page.header(getString(app.svetlo.R.string.label_b9c9ff652d))
         page.row("Svetlo ${BuildConfig.VERSION_NAME}", "Размер установки: ${apkSizeKb()} КБ")
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        if (requestCode == 40) {
+            Thread {
+                val result = runCatching { contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use { it.write(app.svetlo.Backup.export()) } }
+                runOnUiThread { toast(if (result.isSuccess) getString(app.svetlo.R.string.label_a2569c1e10) else getString(app.svetlo.R.string.label_b1980f4b88)) }
+            }.start()
+        } else if (requestCode == 41) {
+            Thread {
+                val result = runCatching { contentResolver.openInputStream(uri)!!.use { input ->
+                    app.svetlo.Backup.validate(app.svetlo.Backup.read(input))
+                } }
+                runOnUiThread {
+                    val text = result.getOrNull()
+                    if (text == null) toast("Не удалось прочитать копию: ${result.exceptionOrNull()?.message}")
+                    else confirm(getString(app.svetlo.R.string.label_ccfc74ba96)) {
+                        Thread { val imported = runCatching { app.svetlo.Backup.restore(text) }; runOnUiThread { toast(if (imported.isSuccess) getString(app.svetlo.R.string.label_b0345f858b) else getString(app.svetlo.R.string.label_c7894c072c)); if (imported.isSuccess) recreate() } }.start()
+                    }
+                }
+            }.start()
+        }
     }
 
     override fun onResume() {
@@ -97,9 +142,11 @@ class SettingsActivity : Activity() {
 
     private fun confirm(title: String, action: () -> Unit) {
         AlertDialog.Builder(this).setTitle(title)
-            .setPositiveButton("Да") { _, _ -> action() }
-            .setNegativeButton("Отмена", null).show()
+            .setPositiveButton(getString(app.svetlo.R.string.label_8d2fab2d12)) { _, _ -> action() }
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
     }
 
     private fun toast(t: String) = Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
 }
+
+class IncognitoSettingsActivity : SettingsActivity()

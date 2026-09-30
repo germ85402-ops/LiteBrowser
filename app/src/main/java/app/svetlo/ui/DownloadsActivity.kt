@@ -146,14 +146,14 @@ class DownloadsActivity : Activity() {
 
     private fun toolbarMenu(anchor: View) {
         val m = PopupMenu(this, anchor)
-        m.menu.add(0, 1, 0, "Очистить список").isEnabled = items.any { !it.active }
-        m.menu.add(0, 2, 0, "Системные загрузки")
+        m.menu.add(0, 1, 0, getString(app.svetlo.R.string.label_f32702d79a)).isEnabled = items.any { !it.active }
+        m.menu.add(0, 2, 0, getString(app.svetlo.R.string.label_607f1ccf7c))
         m.setOnMenuItemClickListener {
             when (it.itemId) {
                 1 -> confirmClear()
                 2 -> runCatching {
                     startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }.onFailure { toast("Системные загрузки недоступны") }
+                }.onFailure { toast(getString(app.svetlo.R.string.label_63c10d31d1)) }
             }
             true
         }
@@ -161,34 +161,49 @@ class DownloadsActivity : Activity() {
     }
 
     private fun confirmClear() {
-        AlertDialog.Builder(this).setTitle("Очистить список загрузок?")
-            .setMessage("Завершённые загрузки исчезнут из списка. Файлы останутся на устройстве.")
-            .setPositiveButton("Очистить") { _, _ -> DownloadRegistry.clearFinished() }
-            .setNegativeButton("Отмена", null).show()
+        AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_d9a2cd6cde))
+            .setMessage(getString(app.svetlo.R.string.label_0c3ab8d749))
+            .setPositiveButton(getString(app.svetlo.R.string.label_98b2073ed1)) { _, _ -> DownloadRegistry.clearFinished() }
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
     }
 
     private fun options(e: DownloadEntry) {
         val acts = ArrayList<Pair<String, () -> Unit>>()
-        if (e.active) acts += "Отменить загрузку" to { Downloads.cancel(this, e) }
+        if (e.active && e.jobId >= 0) acts += (if (e.status == DownloadStatus.PAUSED) getString(app.svetlo.R.string.label_d875700a04) else getString(app.svetlo.R.string.label_4205b1307e)) to {
+            app.svetlo.HlsDownloadService.pause(this, e.jobId, e.status != DownloadStatus.PAUSED)
+        }
+        if (e.status == DownloadStatus.FAILED || e.status == DownloadStatus.CANCELLED) acts += getString(app.svetlo.R.string.label_4ead607955) to {
+            startActivity(Intent(this, app.svetlo.MainActivity::class.java).setAction("app.svetlo.RETRY_DOWNLOAD").putExtra("download_id", e.id))
+        }
+        if (e.active) acts += getString(app.svetlo.R.string.label_136bdcb8e4) to { Downloads.cancel(this, e) }
+        if (e.status == DownloadStatus.DONE && e.mime == "video/mp4" && e.extraUris.isNotEmpty()) {
+            acts += getString(app.svetlo.R.string.label_cbfd27adec) to {
+                toast(getString(app.svetlo.R.string.label_735781aa15))
+                Thread {
+                    val result = runCatching { app.svetlo.MediaMerge.merge(applicationContext, e) }
+                    runOnUiThread { toast(result.fold({ "Сохранено: $it" }, { "Не удалось объединить: ${it.message}" })) }
+                }.start()
+            }
+        }
         if (e.status == DownloadStatus.DONE) {
-            acts += "Открыть" to { Downloads.open(this, e) }
+            acts += getString(app.svetlo.R.string.label_1259571a15) to { Downloads.open(this, e) }
             acts += getString(R.string.share) to { Downloads.share(this, e) }
         }
-        if (e.source.startsWith("http", ignoreCase = true)) acts += "Копировать ссылку" to {
+        if (e.source.startsWith("http", ignoreCase = true)) acts += getString(app.svetlo.R.string.label_69d7d7248a) to {
             getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("url", e.source))
-            toast("Ссылка скопирована")
+            toast(getString(app.svetlo.R.string.label_49261ec6a4))
         }
-        if (!e.active) acts += "Удалить из списка" to { Downloads.delete(this, e, deleteFile = false) }
-        if (e.status == DownloadStatus.DONE || e.contentUri != null) acts += "Удалить файл" to { confirmDeleteFile(e) }
+        if (!e.active) acts += getString(app.svetlo.R.string.label_adc8ad240f) to { Downloads.delete(this, e, deleteFile = false) }
+        if (e.status == DownloadStatus.DONE || e.contentUri != null) acts += getString(app.svetlo.R.string.label_558923761b) to { confirmDeleteFile(e) }
         AlertDialog.Builder(this).setTitle(e.name)
             .setItems(acts.map { it.first }.toTypedArray()) { _, i -> acts[i].second() }
             .show()
     }
 
     private fun confirmDeleteFile(e: DownloadEntry) {
-        AlertDialog.Builder(this).setTitle("Удалить файл?").setMessage(e.name)
-            .setPositiveButton("Удалить") { _, _ -> Downloads.delete(this, e, deleteFile = true) }
-            .setNegativeButton("Отмена", null).show()
+        AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.label_5ccd43e336)).setMessage(e.name)
+            .setPositiveButton(getString(app.svetlo.R.string.label_86ea33aef5)) { _, _ -> Downloads.delete(this, e, deleteFile = true) }
+            .setNegativeButton(getString(app.svetlo.R.string.label_0ec753be8d), null).show()
     }
 
     private fun toast(t: String) = Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
@@ -212,7 +227,7 @@ class DownloadsActivity : Activity() {
     private class Holder(val icon: ImageView, val name: TextView, val status: TextView, val progress: ProgressBar, val action: ImageButton)
 
     private companion object {
-        // Keeps "1.2 МБ/с" on one line when large fonts wrap the status.
+        // Keeps getString(app.svetlo.R.string.label_b3697f4d85) on one line when large fonts wrap the status.
         val UNIT_GAP = Regex(" (Б|КБ|МБ|ГБ|ТБ)")
     }
 
@@ -240,12 +255,12 @@ class DownloadsActivity : Activity() {
                 h.progress.isIndeterminate = pct == null
                 if (pct != null) h.progress.progress = pct
                 h.action.setImageResource(R.drawable.ic_close)
-                h.action.contentDescription = "Отменить загрузку"
+                h.action.contentDescription = getString(app.svetlo.R.string.label_136bdcb8e4)
                 h.action.setOnClickListener { Downloads.cancel(this@DownloadsActivity, e) }
             } else {
                 h.progress.visibility = View.GONE
                 h.action.setImageResource(R.drawable.ic_more_vert)
-                h.action.contentDescription = "Действия"
+                h.action.contentDescription = getString(app.svetlo.R.string.label_9978ac34b2)
                 h.action.setOnClickListener { options(e) }
             }
             return row
@@ -283,7 +298,7 @@ class DownloadsActivity : Activity() {
             texts.addView(status)
             texts.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)).apply { topMargin = dp(8) })
             row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            val action = iconButton(ctx, R.drawable.ic_more_vert, "Действия") {}.apply { isFocusable = false }
+            val action = iconButton(ctx, R.drawable.ic_more_vert, getString(app.svetlo.R.string.label_9978ac34b2)) {}.apply { isFocusable = false }
             row.addView(action, LinearLayout.LayoutParams(dp(44), dp(44)))
             row.tag = Holder(icon, name, status, progress, action)
             return row
