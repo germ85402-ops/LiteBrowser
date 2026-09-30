@@ -67,7 +67,21 @@ jobs:
           umask 077
           trap 'rm -f "$RUNNER_TEMP/release-source.p12" "$RUNNER_TEMP/release-compatible.p12" "$RUNNER_TEMP/release.pem"' EXIT
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release-source.p12"
-          openssl pkcs12 -in "$RUNNER_TEMP/release-source.p12" -passin env:SVETLO_STORE_PASSWORD -out "$RUNNER_TEMP/release.pem" -nodes
+          # Imported secrets can contain a final CR/LF, or the PKCS12 may use the key password.
+          # Try only these supplied credentials; never log passwords or private key material.
+          opened=false
+          for candidate in "$SVETLO_STORE_PASSWORD" "$SVETLO_KEY_PASSWORD" "$(printf '%s' "$SVETLO_STORE_PASSWORD" | tr -d '\r\n')" "$(printf '%s' "$SVETLO_KEY_PASSWORD" | tr -d '\r\n')"; do
+            export SVETLO_SOURCE_PASSWORD="$candidate"
+            if openssl pkcs12 -in "$RUNNER_TEMP/release-source.p12" -passin env:SVETLO_SOURCE_PASSWORD -out "$RUNNER_TEMP/release.pem" -nodes 2>/dev/null; then
+              opened=true
+              break
+            fi
+          done
+          unset SVETLO_SOURCE_PASSWORD candidate
+          if [ "$opened" != true ]; then
+            echo "::error::Neither supplied signing password opens the PKCS12. Correct SVETLO_STORE_PASSWORD / SVETLO_KEY_PASSWORD for the existing SVETLO_KEYSTORE_BASE64; do not generate a replacement key."
+            exit 1
+          fi
           openssl pkcs12 -export -in "$RUNNER_TEMP/release.pem" -out "$RUNNER_TEMP/release-compatible.p12" -passout env:SVETLO_STORE_PASSWORD -name "$SVETLO_KEY_ALIAS" -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
           keytool -importkeystore -srckeystore "$RUNNER_TEMP/release-compatible.p12" -srcstoretype PKCS12 -srcstorepass:env SVETLO_STORE_PASSWORD -srcalias "$SVETLO_KEY_ALIAS" -destkeystore "$RUNNER_TEMP/release.jks" -deststoretype JKS -deststorepass:env SVETLO_STORE_PASSWORD -destkeypass:env SVETLO_KEY_PASSWORD -destalias "$SVETLO_KEY_ALIAS" -noprompt
           echo "SVETLO_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
