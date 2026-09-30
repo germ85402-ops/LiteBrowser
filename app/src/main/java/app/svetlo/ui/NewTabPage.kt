@@ -43,6 +43,7 @@ class NewTabPage(
         view.findViewById<View>(R.id.ntpStats).setOnClickListener {
             act.startActivity(android.content.Intent(act, AdblockActivity::class.java))
         }
+        updateLayout()
         if (incognito) {
             view.findViewById<View>(R.id.ntpIncognito).visibility = View.VISIBLE
             tiles.visibility = View.GONE
@@ -55,6 +56,16 @@ class NewTabPage(
             } else {
                 act.getString(app.svetlo.R.string.label_ec102be15f)
             }
+        }
+    }
+
+    fun updateLayout() {
+        val config = act.resources.configuration
+        tiles.columnCount = if (config.screenWidthDp < 360 || config.fontScale >= 1.3f) 3 else 4
+        (view as? android.widget.ScrollView)?.getChildAt(0)?.apply {
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                if (config.screenWidthDp >= 760) act.dp(720) else android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL)
         }
     }
 
@@ -121,7 +132,8 @@ class NewTabPage(
             textSize = 12f
             setTextColor(act.color(R.color.c_text))
             gravity = Gravity.CENTER
-            maxLines = 1
+            maxLines = 2
+            minLines = 2
             ellipsize = TextUtils.TruncateAt.END
             setPadding(act.dp(4), act.dp(8), act.dp(4), 0)
         })
@@ -159,7 +171,9 @@ class NewTabPage(
             textSize = 12f
             setTextColor(act.color(R.color.c_accent))
             gravity = Gravity.CENTER
-            maxLines = 1
+            maxLines = 2
+            minLines = 2
+            ellipsize = TextUtils.TruncateAt.END
             setPadding(act.dp(4), act.dp(8), act.dp(4), 0)
         })
         setOnClickListener { showAddShortcutDialog() }

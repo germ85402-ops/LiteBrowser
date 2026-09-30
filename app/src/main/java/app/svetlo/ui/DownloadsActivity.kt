@@ -252,15 +252,15 @@ class DownloadsActivity : Activity() {
             if (e.active) {
                 h.progress.visibility = View.VISIBLE
                 val pct = Downloads.progressPercent(e)
-                h.progress.isIndeterminate = pct == null
-                if (pct != null) h.progress.progress = pct
-                h.action.setImageResource(R.drawable.ic_close)
-                h.action.contentDescription = getString(app.svetlo.R.string.label_136bdcb8e4)
-                h.action.setOnClickListener { Downloads.cancel(this@DownloadsActivity, e) }
+                h.progress.isIndeterminate = pct == null && e.status != DownloadStatus.PAUSED
+                h.progress.progress = pct ?: 0
+                h.action.setImageResource(R.drawable.ic_more_vert)
+                h.action.contentDescription = getString(R.string.entry_actions, e.name)
+                h.action.setOnClickListener { options(e) }
             } else {
                 h.progress.visibility = View.GONE
                 h.action.setImageResource(R.drawable.ic_more_vert)
-                h.action.contentDescription = getString(app.svetlo.R.string.label_9978ac34b2)
+                h.action.contentDescription = getString(R.string.entry_actions, e.name)
                 h.action.setOnClickListener { options(e) }
             }
             return row
@@ -283,7 +283,7 @@ class DownloadsActivity : Activity() {
             row.addView(icon, LinearLayout.LayoutParams(dp(44), dp(44)))
             val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(8), 0) }
             val name = TextView(ctx).apply {
-                textSize = 15f; setTextColor(color(R.color.c_text)); maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE
+                textSize = 15f; setTextColor(color(R.color.c_text)); maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             }
             val status = TextView(ctx).apply {
                 textSize = 13f; setTextColor(color(R.color.c_text2)); maxLines = 2; ellipsize = TextUtils.TruncateAt.END
@@ -298,8 +298,8 @@ class DownloadsActivity : Activity() {
             texts.addView(status)
             texts.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)).apply { topMargin = dp(8) })
             row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            val action = iconButton(ctx, R.drawable.ic_more_vert, getString(app.svetlo.R.string.label_9978ac34b2)) {}.apply { isFocusable = false }
-            row.addView(action, LinearLayout.LayoutParams(dp(44), dp(44)))
+            val action = iconButton(ctx, R.drawable.ic_more_vert, getString(app.svetlo.R.string.label_9978ac34b2)) {}
+            row.addView(action, LinearLayout.LayoutParams(dp(48), dp(48)))
             row.tag = Holder(icon, name, status, progress, action)
             return row
         }

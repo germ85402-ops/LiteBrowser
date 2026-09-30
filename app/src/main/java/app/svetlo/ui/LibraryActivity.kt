@@ -54,6 +54,8 @@ class LibraryActivity : Activity() {
             textSize = 15f
             isSingleLine = true
             setTextColor(color(R.color.c_text))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
             if (android.os.Build.VERSION.SDK_INT >= 26) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         }
         bar.addView(search, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
@@ -63,7 +65,9 @@ class LibraryActivity : Activity() {
         val frame = android.widget.FrameLayout(this)
         val list = ListView(this).apply { divider = null; adapter = this@LibraryActivity.adapter }
         empty = TextView(this).apply {
-            text = if (bookmarks) "Закладок пока нет.\nНажмите ☆ в меню, чтобы добавить." else "История пуста"
+            text = if (bookmarks) getString(R.string.bookmark_empty_help) else "История пуста"
+            setPadding(dp(32), 0, dp(32), 0)
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             gravity = Gravity.CENTER
             textSize = 15f
             setTextColor(color(R.color.c_text2))
@@ -80,6 +84,7 @@ class LibraryActivity : Activity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) = load()
         })
+        search.setOnEditorActionListener { _, _, _ -> search.hideKeyboard(); true }
         load()
     }
 
@@ -94,6 +99,8 @@ class LibraryActivity : Activity() {
                     if (request != generation || isDestroyed) return@post
                     items = result
                     adapter.notifyDataSetChanged()
+                    empty.text = if (q.isNotEmpty()) getString(R.string.library_no_results)
+                        else if (bookmarks) getString(R.string.bookmark_empty_help) else "История пуста"
                     empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
                 }
             }
@@ -122,8 +129,10 @@ class LibraryActivity : Activity() {
                     1 -> getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("url", e.url))
                     2 -> {
                         if (bookmarks) BrowserDb.removeBookmark(e.url) else BrowserDb.deleteHistory(e.url)
+                        // History writes are queued: update the visible list immediately rather than racing a reload.
                         items = items - e
                         adapter.notifyDataSetChanged()
+                        empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
                     }
                 }
             }.show()
@@ -161,8 +170,13 @@ class LibraryActivity : Activity() {
                     textSize = 12f; setTextColor(color(R.color.c_text2)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 })
                 addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(iconButton(this@LibraryActivity, R.drawable.ic_more_vert, getString(R.string.menu)) {})
             }
             val e = items[position]
+            row.getChildAt(2).apply {
+                contentDescription = getString(R.string.entry_actions, e.title.ifBlank { hostOf(e.url) })
+                setOnClickListener { options(e) }
+            }
             (row.getChildAt(0) as ImageView).setImageDrawable(LetterIcon(e.url, e.title))
             val texts = row.getChildAt(1) as LinearLayout
             (texts.getChildAt(0) as TextView).text = e.title.ifBlank { hostOf(e.url) }

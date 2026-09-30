@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="60dp"
+    android:layout_height="wrap_content"
+    android:minHeight="64dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
     android:background="?android:attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:orientation="horizontal"
@@ -44,7 +47,6 @@
         android:layout_width="52dp"
         android:layout_height="52dp"
         android:background="?android:attr/selectableItemBackgroundBorderless"
-        android:contentDescription="@string/url_hint"
-        android:focusable="false"
+        android:contentDescription="@string/fill_suggestion"
         android:src="@drawable/ic_north_west" />
 </LinearLayout>

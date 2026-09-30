@@ -51,11 +51,16 @@ open class SettingsActivity : Activity() {
         page.switchRow(getString(app.svetlo.R.string.label_e4dd681cb3), getString(app.svetlo.R.string.label_d1caf6841a), Prefs.autoHideBar) { Prefs.autoHideBar = it }
         page.switchRow(getString(app.svetlo.R.string.label_60cadd7396), getString(app.svetlo.R.string.label_252b8b6ea8), Prefs.pullToRefresh) { Prefs.pullToRefresh = it }
 
-        page.header(getString(app.svetlo.R.string.label_9827140f7c))
-        page.row(getString(app.svetlo.R.string.label_eb8d47c8ed), getString(app.svetlo.R.string.label_eb51083cdc))
-        page.row(getString(app.svetlo.R.string.label_4d9fd9a9b3), getString(app.svetlo.R.string.label_fe14840cb4))
-        page.row(getString(app.svetlo.R.string.label_f130957cec), getString(app.svetlo.R.string.label_d19457bde2))
-        page.row(getString(app.svetlo.R.string.label_c8646543a0), getString(app.svetlo.R.string.label_cbe1969c24))
+        page.row(getString(app.svetlo.R.string.gestures_help), getString(app.svetlo.R.string.gestures_summary)) {
+            val help = listOf(
+                getString(app.svetlo.R.string.label_eb8d47c8ed) to getString(app.svetlo.R.string.label_eb51083cdc),
+                getString(app.svetlo.R.string.label_4d9fd9a9b3) to getString(app.svetlo.R.string.label_fe14840cb4),
+                getString(app.svetlo.R.string.label_f130957cec) to getString(app.svetlo.R.string.label_d19457bde2),
+                getString(app.svetlo.R.string.label_c8646543a0) to getString(app.svetlo.R.string.label_cbe1969c24),
+            ).joinToString("\n\n") { (gesture, action) -> "$gesture\n$action" }
+            AlertDialog.Builder(this).setTitle(getString(app.svetlo.R.string.gestures_help))
+                .setMessage(help).setPositiveButton(android.R.string.ok, null).show()
+        }
 
         page.header(getString(app.svetlo.R.string.label_7f2be1ba3d))
         adblockRow = page.row(getString(app.svetlo.R.string.label_356dbd9a03), null) {
@@ -103,6 +108,7 @@ open class SettingsActivity : Activity() {
         }
         page.header(getString(app.svetlo.R.string.label_b9c9ff652d))
         page.row("Svetlo ${BuildConfig.VERSION_NAME}", "Размер установки: ${apkSizeKb()} КБ")
+        page.enableSearch()
     }
 
     @Deprecated("Deprecated in Java")

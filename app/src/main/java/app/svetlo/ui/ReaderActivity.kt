@@ -35,6 +35,11 @@ open class ReaderActivity : Activity() {
         article = app.svetlo.ReadingList.read(this, intent.getStringExtra("offline_article")) ?: ArticleStore.read(this, savedInstanceState?.getString("article_file") ?: intent.getStringExtra("article_file")) ?: pending ?: run { finish(); return }
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(color(R.color.c_toolbar))
+        }
         bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -54,14 +59,15 @@ open class ReaderActivity : Activity() {
                 runOnUiThread { android.widget.Toast.makeText(this, if (result.isSuccess) "Статья сохранена для чтения офлайн" else "Не удалось сохранить статью", android.widget.Toast.LENGTH_SHORT).show() }
             }.start()
         })
-        bar.addView(textButton("A−", getString(app.svetlo.R.string.label_d1584cb6e2)) { setFont(Prefs.readerFont - 2) })
-        bar.addView(textButton("A+", getString(app.svetlo.R.string.label_0e34fd5ee0)) { setFont(Prefs.readerFont + 2) })
-        bar.addView(textButton("Aa", getString(app.svetlo.R.string.label_b6e3f0f010)) { Prefs.readerSerif = !Prefs.readerSerif; render(keepScroll = true) })
-        bar.addView(textButton("◐", "Тема") { Prefs.readerTheme = (theme().ordinal + 1) % Reader.Theme.entries.size; render(keepScroll = true) })
+        controls.addView(textButton("A−", getString(app.svetlo.R.string.label_d1584cb6e2)) { setFont(Prefs.readerFont - 2) })
+        controls.addView(textButton("A+", getString(app.svetlo.R.string.label_0e34fd5ee0)) { setFont(Prefs.readerFont + 2) })
+        controls.addView(textButton("Aa", getString(app.svetlo.R.string.label_b6e3f0f010)) { Prefs.readerSerif = !Prefs.readerSerif; render(keepScroll = true) })
+        controls.addView(textButton("◐", "Тема") { Prefs.readerTheme = (theme().ordinal + 1) % Reader.Theme.entries.size; render(keepScroll = true) })
         bar.addView(iconButton(this, R.drawable.ic_share, getString(R.string.share)) {
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, article.url), null))
         })
         root.addView(bar, ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
+        root.addView(controls, ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
 
         web = WebView(this).apply {
             settings.javaScriptEnabled = false
@@ -97,7 +103,7 @@ open class ReaderActivity : Activity() {
         setTypeface(typeface, Typeface.BOLD)
         gravity = Gravity.CENTER
         background = themeDrawable(android.R.attr.selectableItemBackgroundBorderless)
-        layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+        layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
         setOnClickListener { onClick() }
     }
 

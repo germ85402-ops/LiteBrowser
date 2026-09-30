@@ -276,14 +276,16 @@ open class MainActivity : Activity() {
         }
         findViewById<View>(R.id.btnMenu).setOnClickListener { v -> current?.let { menu.show(v, it, Prefs.bottomBar) } }
         btnClear.setOnClickListener { urlBar.text.clear() }
+        findViewById<View>(R.id.btnSearchBack).setOnClickListener { urlBar.clearFocus(); urlBar.hideKeyboard() }
         shieldChip.setOnClickListener { showSiteInfo() }
         siteIcon.setOnClickListener { if (!urlBar.hasFocus()) showSiteInfo() }
         mediaFab.setOnClickListener { if (mse.recordingTab != null) stopMseRecording() else showVideos() }
         urlBar.setOnFocusChangeListener { _, focused ->
             omnibox.setBackgroundResource(if (focused) R.drawable.bg_omnibox_focused else R.drawable.bg_omnibox)
             listOf(R.id.btnHome, R.id.btnTabs, R.id.btnMenu).forEach {
-                findViewById<View>(it).visibility = if (focused) View.GONE else View.VISIBLE
+                findViewById<View>(it).visibility = if (focused || it == R.id.btnHome && resources.configuration.screenWidthDp < 360) View.GONE else View.VISIBLE
             }
+            findViewById<View>(R.id.btnSearchBack).visibility = if (focused) View.VISIBLE else View.GONE
             if (focused) {
                 showBars()
                 val t = current
@@ -337,7 +339,7 @@ open class MainActivity : Activity() {
                 else -> R.drawable.ic_info_warn
             },
         )
-        val showShield = !focused && !tab.isNtp && Prefs.adblock
+        val showShield = !focused && !tab.isNtp && Prefs.adblock && resources.configuration.screenWidthDp >= 400 && resources.configuration.fontScale < 1.3f
         shieldChip.visibility = if (showShield) View.VISIBLE else View.GONE
         if (showShield) {
             val off = AdBlock.isWhitelisted(tab.host)
@@ -347,6 +349,8 @@ open class MainActivity : Activity() {
             shieldChip.text = if (off) "" else tab.blocked.get().toString()
         }
         tabCount.text = if (tabs.size > 99) ":)" else tabs.size.toString()
+        findViewById<View>(R.id.btnTabs).contentDescription = getString(R.string.tab_counter_description, tabs.size)
+        findViewById<View>(R.id.btnHome).visibility = if (focused || resources.configuration.screenWidthDp < 360) View.GONE else View.VISIBLE
         if (lastTabCount >= 0 && lastTabCount != tabs.size) {
             tabCount.animate().cancel()
             if (motionDuration(220) == 0L) {
@@ -687,6 +691,13 @@ open class MainActivity : Activity() {
             tab.parent != null && tab.parent in tabs -> closeTab(tab)
             else -> moveTaskToBack(true)
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        ntp.updateLayout()
+        switcher.refresh()
+        refreshToolbar()
     }
 
     override fun onPause() {

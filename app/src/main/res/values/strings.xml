@@ -191,7 +191,7 @@
     <string name="label_b1e23e1ff0" formatted="false">Размер текста</string>
     <string name="label_b1ffffa8ce" formatted="false">Не удалось установить защищённое соединение</string>
     <string name="label_b2717fdac6" formatted="false">Не удалось открыть страницу</string>
-    <string name="label_b304e3922c" formatted="false">Отключить блокировку для сайта можно через значок щита в адресной строке</string>
+    <string name="label_b304e3922c" formatted="false">Отключить блокировку для сайта можно через значок слева от адреса или кнопку «О странице» в меню</string>
     <string name="label_b3697f4d85" formatted="false">1.2 МБ/с</string>
     <string name="label_b5a0f1f8cb" formatted="false">Попробовать HTTP</string>
     <string name="label_b6819e91ff" formatted="false">Загрузка…</string>
@@ -263,4 +263,19 @@
     <string name="label_fe14840cb4" formatted="false">Открыть список вкладок</string>
     <string name="label_fe8f79f29d" formatted="false">Скачать</string>
     <string name="label_ff29c197a8" formatted="false">вашему местоположению</string>
+    <string name="cancel_search">Закрыть поиск</string>
+    <string name="fill_suggestion">Подставить в адресную строку</string>
+    <string name="tabs_no_results">Вкладки не найдены.\nПопробуйте другое название или адрес.</string>
+    <string name="close_named_tab">Закрыть вкладку: %1$s</string>
+    <string name="settings_search">Поиск в настройках</string>
+    <string name="settings_no_results">Настройки не найдены</string>
+    <string name="gestures_help">Жесты и быстрые действия</string>
+    <string name="gestures_summary">Переключение вкладок, закрытие и быстрый доступ</string>
+    <string name="bookmark_add">Добавить закладку</string>
+    <string name="bookmark_remove">Удалить закладку</string>
+    <string name="stop_loading">Остановить загрузку страницы</string>
+    <string name="library_no_results">Ничего не найдено.\nПопробуйте другой запрос.</string>
+    <string name="bookmark_empty_help">Закладок пока нет.\nДобавьте страницу кнопкой со звездой в меню.</string>
+    <string name="entry_actions">Действия: %1$s</string>
+    <string name="tab_counter_description">Открытые вкладки: %1$d</string>
 </resources>

@@ -15,12 +15,19 @@ import app.svetlo.data.BrowserDb
 class MainMenu(private val act: MainActivity) {
     fun show(anchor: View, tab: Tab, bottom: Boolean) {
         val v = act.layoutInflater.inflate(R.layout.menu_main, null)
-        val pw = PopupWindow(v, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
+        val frame = android.graphics.Rect().also { anchor.getWindowVisibleDisplayFrame(it) }
+        val width = minOf(act.dp(320), (frame.width() - act.dp(16)).coerceAtLeast(act.dp(96)))
+        val pw = PopupWindow(v, width, ViewGroup.LayoutParams.WRAP_CONTENT, true)
         pw.setBackgroundDrawable(act.getDrawable(R.drawable.bg_popup))
         pw.elevation = act.dp(12).toFloat()
         pw.animationStyle = if (act.motionDuration(180) == 0L) 0 else if (bottom) R.style.MenuAnimBottom else R.style.MenuAnimTop
 
         val page = !tab.isNtp
+        v.findViewById<View>(R.id.mHome).visibility = if (page && act.resources.configuration.screenWidthDp < 360) View.VISIBLE else View.GONE
+        if (!page) {
+            listOf(R.id.mQuickActions, R.id.mQuickDivider, R.id.mFind, R.id.mReader, R.id.mShare,
+                R.id.mPrint, R.id.mTranslate, R.id.mAddHome, R.id.mDesktop).forEach { v.findViewById<View>(it).visibility = View.GONE }
+        }
         fun item(id: Int, enabled: Boolean = true, action: () -> Unit) {
             val view = v.findViewById<View>(id)
             view.isEnabled = enabled
@@ -32,14 +39,19 @@ class MainMenu(private val act: MainActivity) {
         v.findViewById<ImageButton>(R.id.mBookmark).setImageResource(
             if (page && BrowserDb.isBookmarked(tab.url)) R.drawable.ic_star else R.drawable.ic_star_border,
         )
+        v.findViewById<View>(R.id.mBookmark).contentDescription = act.getString(
+            if (page && BrowserDb.isBookmarked(tab.url)) R.string.bookmark_remove else R.string.bookmark_add)
         item(R.id.mBookmark, page) { act.toggleBookmark() }
         item(R.id.mVideos, page) { act.showVideos() }
         item(R.id.mInfo, page) { act.showSiteInfo() }
         v.findViewById<ImageButton>(R.id.mRefresh).setImageResource(
             if (tab.progress < 100 && page) R.drawable.ic_close else R.drawable.ic_refresh,
         )
+        v.findViewById<View>(R.id.mRefresh).contentDescription = act.getString(
+            if (tab.progress < 100 && page) R.string.stop_loading else R.string.reload)
         item(R.id.mRefresh, page) { act.reloadOrStop() }
         item(R.id.mNewTab) { act.newTab(null) }
+        item(R.id.mHome, page) { act.findViewById<View>(R.id.btnHome).performClick() }
         item(R.id.mIncognito) { act.openIncognito(null) }
         item(R.id.mRecent) { act.showRecentTabs() }
         item(R.id.mTranslate, page) { act.translatePage() }
@@ -61,6 +73,11 @@ class MainMenu(private val act: MainActivity) {
         val loc = IntArray(2)
         anchor.getLocationInWindow(loc)
         val margin = act.dp(6)
+        // Bound the scrollable menu by the actual visible window, including IME/multi-window.
+        v.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val maxHeight = (frame.height() - anchor.height - margin * 2).coerceAtLeast(act.dp(96))
+        pw.height = minOf(v.measuredHeight, maxHeight)
         if (bottom) {
             val decorH = act.window.decorView.height
             pw.showAtLocation(anchor, Gravity.BOTTOM or Gravity.END, margin, decorH - loc[1] - anchor.height + margin)

@@ -265,4 +265,130 @@ class ScreenshotTest {
         activity.finish()
     }
 
+    private fun descendants(v: View): List<View> = listOf(v) +
+        ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { descendants(g.getChildAt(it)) } } ?: emptyList())
+
+    @Test
+    fun libraryDeleteLastBookmark() {
+        BrowserDb.bookmarks().forEach { BrowserDb.removeBookmark(it.url) }
+        BrowserDb.addBookmark("https://example.com/saved", "Сохранённая страница")
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val intent = android.content.Intent(context, app.svetlo.ui.LibraryActivity::class.java)
+            .putExtra(app.svetlo.ui.LibraryActivity.EXTRA_BOOKMARKS, true)
+        val act = Robolectric.buildActivity(app.svetlo.ui.LibraryActivity::class.java, intent).setup().get(); idle()
+        shot("27_bookmarks", act)
+        descendants(act.window.decorView).first { it.contentDescription?.toString() == act.getString(R.string.entry_actions, "Сохранённая страница") }.performClick()
+        idle()
+        val dialog = ShadowDialog.getLatestDialog() as android.app.AlertDialog
+        dialog.listView.performItemClick(dialog.listView.getChildAt(2), 2, 2)
+        idle()
+        org.junit.Assert.assertTrue(BrowserDb.bookmarks().isEmpty())
+        val empty = descendants(act.window.decorView).filterIsInstance<android.widget.TextView>()
+            .first { it.text.toString() == act.getString(R.string.bookmark_empty_help) }
+        org.junit.Assert.assertEquals(View.VISIBLE, empty.visibility)
+        shot("28_bookmarks_empty", act)
+        act.finish()
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp-xhdpi", fontScale = 1.3f)
+    fun narrowPhoneSearchAndMenu() {
+        val act = main()
+        val url = act.findViewById<EditText>(R.id.urlBar)
+        url.requestFocus(); url.setText("example.com"); idle()
+        org.junit.Assert.assertTrue(url.width >= act.resources.displayMetrics.density * 100)
+        shot("19_small_phone_search", act)
+        act.findViewById<View>(R.id.btnSearchBack).performClick(); idle()
+        org.junit.Assert.assertFalse(url.hasFocus())
+        act.findViewById<View>(R.id.btnMenu).performClick(); idle()
+        val popup = shadowOf(org.robolectric.RuntimeEnvironment.getApplication()).latestPopupWindow
+        org.junit.Assert.assertEquals(View.GONE, popup.contentView.findViewById<View>(R.id.mFind).visibility)
+        org.junit.Assert.assertTrue(popup.width <= act.window.decorView.width)
+        org.junit.Assert.assertTrue(popup.height < act.window.decorView.height)
+        val pv = popup.contentView.rootView
+        shotWithOverlay("20_small_phone_menu", act, pv, act.window.decorView.width - pv.width - act.resources.displayMetrics.density.toInt() * 6, 20)
+        popup.dismiss(); act.finish()
+    }
+
+    @Test
+    fun tabSearchEmptyAndReset() {
+        val act = main()
+        act.findViewById<View>(R.id.btnTabs).performClick(); idle()
+        val search = act.findViewById<EditText>(R.id.tsSearch)
+        org.junit.Assert.assertFalse("Opening tabs should not focus the keyboard", search.hasFocus())
+        search.setText("not-a-tab-94852"); idle()
+        org.junit.Assert.assertEquals(View.VISIBLE, act.findViewById<View>(R.id.tsEmpty).visibility)
+        shot("21_tabs_no_results", act)
+        act.findViewById<View>(R.id.tsClear).performClick(); idle()
+        org.junit.Assert.assertEquals(View.GONE, act.findViewById<View>(R.id.tsEmpty).visibility)
+        search.setText("not-a-tab-94852"); idle()
+        act.findViewById<View>(R.id.tsBack).performClick(); idle()
+        act.findViewById<View>(R.id.btnTabs).performClick(); idle()
+        org.junit.Assert.assertEquals("", search.text.toString())
+        org.junit.Assert.assertEquals(View.VISIBLE, act.findViewById<View>(R.id.tsGrid).visibility)
+        act.finish()
+    }
+
+    @Test
+    fun settingsSearchAndSwitchAccessibility() {
+        val act = Robolectric.buildActivity(SettingsActivity::class.java).setup().get(); idle()
+        val search = descendants(act.window.decorView).filterIsInstance<EditText>().single()
+        search.setText("адресная"); idle()
+        val switch = descendants(act.window.decorView).filterIsInstance<android.widget.Switch>()
+            .first { ((it.parent as View).visibility == View.VISIBLE) }
+        val row = switch.parent as View
+        val node = row.createAccessibilityNodeInfo()
+        org.junit.Assert.assertTrue(node.isCheckable)
+        org.junit.Assert.assertEquals(switch.isChecked, node.isChecked)
+        val previous = switch.isChecked
+        row.performClick(); idle()
+        org.junit.Assert.assertEquals(!previous, switch.isChecked)
+        shot("22_settings_search", act)
+        search.setText("not-a-setting-94852"); idle()
+        val empty = descendants(act.window.decorView).filterIsInstance<android.widget.TextView>()
+            .first { it.text.toString() == act.getString(R.string.settings_no_results) }
+        org.junit.Assert.assertEquals(View.VISIBLE, empty.visibility)
+        search.text.clear(); idle()
+        org.junit.Assert.assertEquals(View.GONE, empty.visibility)
+        app.svetlo.data.Prefs.bottomBar = previous
+        act.finish()
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h1100dp-xhdpi")
+    fun tabletHomeAndSettings() {
+        shot("23_tablet_home", main())
+        shot("24_tablet_settings", Robolectric.buildActivity(SettingsActivity::class.java).setup().get().also { idle() })
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp-xhdpi", fontScale = 1.5f)
+    fun readerNarrowPhone() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val token = ArticleStore.write(context, Article("https://example.com/article", "Тестовая статья", null, null, "<p>Текст статьи для чтения.</p>", "ru"))
+        val intent = android.content.Intent(context, app.svetlo.ui.ReaderActivity::class.java).putExtra("article_file", token)
+        val act = Robolectric.buildActivity(app.svetlo.ui.ReaderActivity::class.java, intent).setup().get(); idle()
+        val controls = descendants(act.window.decorView).filter { it.isClickable && it.visibility == View.VISIBLE }
+        controls.forEach { view ->
+            val location = IntArray(2); view.getLocationInWindow(location)
+            org.junit.Assert.assertTrue("Reader controls must fit in a narrow window", location[0] >= 0 && location[0] + view.width <= act.window.decorView.width)
+        }
+        shot("25_reader_small_phone", act)
+        act.finish()
+    }
+
+    @Test
+    fun activeDownloadActions() {
+        seedDownloads()
+        val act = Robolectric.buildActivity(DownloadsActivity::class.java).setup().get(); idle()
+        val button = descendants(act.window.decorView).first { it.contentDescription?.toString() == act.getString(R.string.entry_actions, "Как устроен Android — лекция 3.mp4") }
+        button.performClick(); idle()
+        org.junit.Assert.assertEquals(DownloadStatus.RUNNING, DownloadRegistry.get("svc-1")!!.status)
+        val dialog = ShadowDialog.getLatestDialog() as android.app.AlertDialog
+        org.junit.Assert.assertEquals(act.getString(R.string.label_4205b1307e), dialog.listView.adapter.getItem(0))
+        val dv = dialog.window!!.decorView
+        shotWithOverlay("26_download_actions", act, dv, (act.window.decorView.width - dv.width) / 2, (act.window.decorView.height - dv.height) / 2)
+        dialog.dismiss(); act.finish()
+    }
+
 }

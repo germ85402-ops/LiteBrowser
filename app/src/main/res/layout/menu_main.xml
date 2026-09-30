@@ -13,6 +13,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="52dp"
+        android:id="@+id/mQuickActions"
         android:orientation="horizontal"
         android:paddingStart="4dp"
         android:paddingEnd="4dp">
@@ -27,9 +28,11 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
+        android:id="@+id/mQuickDivider"
         android:layout_marginBottom="4dp"
         android:background="@color/c_divider" />
 
+    <TextView android:id="@+id/mHome" style="@style/MenuItem" android:drawableStart="@drawable/ic_home" android:text="@string/home" android:visibility="gone" />
     <TextView android:id="@+id/mNewTab" style="@style/MenuItem" android:drawableStart="@drawable/ic_add" android:text="@string/new_tab" />
     <TextView android:id="@+id/mIncognito" style="@style/MenuItem" android:drawableStart="@drawable/ic_incognito" android:text="@string/incognito_new" />
     <TextView android:id="@+id/mHistory" style="@style/MenuItem" android:drawableStart="@drawable/ic_history" android:text="@string/history" />
@@ -46,7 +49,8 @@
     <LinearLayout
         android:id="@+id/mDesktop"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
         android:background="?android:attr/selectableItemBackground"
         android:gravity="center_vertical"
         android:orientation="horizontal"

@@ -40,6 +40,9 @@ class TabSwitcher(
 ) {
     private val grid = root.findViewById<GridView>(R.id.tsGrid)
     private val title = root.findViewById<TextView>(R.id.tsTitle)
+    private val search = root.findViewById<android.widget.EditText>(R.id.tsSearch)
+    private val clear = root.findViewById<View>(R.id.tsClear)
+    private val empty = root.findViewById<View>(R.id.tsEmpty)
     private var query = ""
     private val visibleTabs get() = tabs.filter { query.isBlank() || it.title.contains(query, true) || it.url.contains(query, true) }
     private val adapter = Adapter()
@@ -49,15 +52,22 @@ class TabSwitcher(
     val isShown get() = root.visibility == View.VISIBLE
 
     init {
+        root.isFocusableInTouchMode = true
         grid.adapter = adapter
-        grid.numColumns = (act.resources.configuration.screenWidthDp / 220).coerceIn(2, 5)
-        root.findViewById<android.widget.EditText>(R.id.tsSearch).addTextChangedListener(object : android.text.TextWatcher {
+        updateColumns()
+        clear.setOnClickListener { search.text.clear(); search.showKeyboard() }
+        search.setOnEditorActionListener { _, _, _ -> search.hideKeyboard(); true }
+        search.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: android.text.Editable?) { query = s.toString(); adapter.notifyDataSetChanged() }
+            override fun afterTextChanged(s: android.text.Editable?) {
+                query = s.toString().trim()
+                clear.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                refreshResults()
+            }
         })
         root.findViewById<View>(R.id.tsBack).setOnClickListener { close() }
-        root.findViewById<View>(R.id.tsNew).setOnClickListener { onNew() }
+        root.findViewById<View>(R.id.tsNew).setOnClickListener { search.hideKeyboard(); onNew() }
         root.findViewById<View>(R.id.tsCloseAll).setOnClickListener { onCloseAll() }
         root.findViewById<ImageButton>(R.id.tsMode).apply {
             setImageResource(if (incognito) R.drawable.ic_tab_square else R.drawable.ic_incognito)
@@ -68,10 +78,13 @@ class TabSwitcher(
 
     fun show() {
         if (isShown) return
+        search.text.clear()
+        search.clearFocus()
         refresh()
         val cur = current()
         val pos = visibleTabs.indexOf(cur).coerceAtLeast(0)
         root.visibility = View.VISIBLE
+        root.requestFocus()
         root.alpha = 0f
         val fadeIn = act.motionDuration(200)
         if (fadeIn == 0L) root.alpha = 1f else root.animate().alpha(1f).setDuration(fadeIn).start()
@@ -97,6 +110,8 @@ class TabSwitcher(
     /** Leaves the switcher by zooming into [tab] (the current tab by default). */
     fun close(tab: Tab? = current()) {
         if (!isShown) return
+        search.hideKeyboard()
+        search.clearFocus()
         if (tab == null) { hide(); return }
         val from = thumbRect(visibleTabs.indexOf(tab))
         onSelect(tab)
@@ -115,14 +130,28 @@ class TabSwitcher(
 
     fun hide() {
         if (!isShown) return
+        search.hideKeyboard()
+        search.clearFocus()
         root.animate().alpha(0f).setDuration(act.motionDuration(150)).withEndAction { root.visibility = View.GONE }.start()
     }
 
     fun refresh() {
-        grid.numColumns = (act.resources.configuration.screenWidthDp / 220).coerceIn(2, 5)
+        updateColumns()
         title.text = if (incognito) act.resources.getQuantityString(R.plurals.incognito_tabs_count, tabs.size, tabs.size)
         else act.resources.getQuantityString(R.plurals.tabs_count, tabs.size, tabs.size)
+        refreshResults()
+    }
+
+    private fun updateColumns() {
+        val config = act.resources.configuration
+        val minWidth = if (config.fontScale >= 1.3f) 260 else 220
+        grid.numColumns = (config.screenWidthDp / minWidth).coerceIn(if (config.screenWidthDp < 360 || config.fontScale >= 1.3f) 1 else 2, 5)
+    }
+
+    private fun refreshResults() {
         adapter.notifyDataSetChanged()
+        empty.visibility = if (visibleTabs.isEmpty()) View.VISIBLE else View.GONE
+        grid.visibility = if (visibleTabs.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun onLaidOut(action: () -> Unit) {
@@ -223,6 +252,9 @@ class TabSwitcher(
             v.animate().cancel()
             v.translationX = 0f
             v.alpha = 1f
+            v.scaleX = 1f
+            v.scaleY = 1f
+            v.isSelected = tab === current()
             v.setBackgroundResource(if (tab === current()) R.drawable.bg_card_selected else R.drawable.bg_card)
             v.findViewById<TextView>(R.id.tabTitle).text = tab.displayTitle()
             val icon = v.findViewById<ImageView>(R.id.tabIcon)
@@ -235,6 +267,7 @@ class TabSwitcher(
                 setImageBitmap(tab.thumbnail)
                 visibility = if (tab === hiddenTab) View.INVISIBLE else View.VISIBLE
             }
+            v.findViewById<View>(R.id.tabClose).contentDescription = act.getString(R.string.close_named_tab, tab.displayTitle())
             v.findViewById<View>(R.id.tabClose).setOnClickListener {
                 v.animate().scaleX(0.8f).scaleY(0.8f).alpha(0f).setDuration(act.motionDuration(150)).withEndAction {
                     v.scaleX = 1f; v.scaleY = 1f

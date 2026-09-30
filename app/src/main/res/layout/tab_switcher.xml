@@ -48,7 +48,23 @@
                 android:src="@drawable/ic_delete" />
         </LinearLayout>
 
-        <EditText android:id="@+id/tsSearch" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginHorizontal="12dp" android:singleLine="true" android:inputType="text" android:hint="@string/tab_search" android:textColor="@color/c_text" android:background="@drawable/bg_omnibox" android:paddingHorizontal="16dp" android:importantForAutofill="no" />
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="48dp"
+            android:layout_marginHorizontal="12dp" android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_omnibox" android:gravity="center_vertical">
+            <EditText android:id="@+id/tsSearch" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="match_parent" android:singleLine="true" android:inputType="text"
+                android:imeOptions="actionSearch|flagNoExtractUi" android:hint="@string/tab_search"
+                android:textSize="16sp" android:textColor="@color/c_text" android:textColorHint="@color/c_text2"
+                android:background="@null" android:paddingHorizontal="16dp" android:importantForAutofill="no" />
+            <ImageButton android:id="@+id/tsClear" style="@style/IconButton"
+                android:src="@drawable/ic_close_small" android:contentDescription="@string/clear" android:visibility="gone" />
+        </LinearLayout>
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <TextView android:id="@+id/tsEmpty" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:gravity="center" android:padding="32dp" android:text="@string/tabs_no_results"
+            android:textColor="@color/c_text2" android:textSize="16sp" android:visibility="gone"
+            android:accessibilityLiveRegion="polite" />
 
         <GridView
             android:id="@+id/tsGrid"
@@ -64,6 +80,7 @@
             android:paddingBottom="96dp"
             android:stretchMode="columnWidth"
             android:verticalSpacing="12dp" />
+        </FrameLayout>
     </LinearLayout>
 
     <TextView
